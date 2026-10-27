@@ -145,8 +145,8 @@ class BalanceCoreModule : Module() {
     AsyncFunction("setSetting") { key: String, value: String ->
       Ledger.write(context) { db ->
         db.setSetting(key, value)
-        // Watched apps and self names change what counts as a transaction or a transfer.
-        if (key == Settings.WATCHED_PACKAGES || key == Settings.SELF_NAMES) Ledger.reprocessAll(db)
+        // Watched apps change what counts as a transaction.
+        if (key == Settings.WATCHED_PACKAGES) Ledger.reprocessAll(db)
       }
     }
 
@@ -185,10 +185,10 @@ class BalanceCoreModule : Module() {
     // Whose ledger is open: a user id, "local", or null before anything is chosen.
     Function("activeUser") { Account.userId(context) }
 
-    AsyncFunction("mergeFromCloud") { userId: String, categories: List<CloudCategory>, transactions: List<CloudTransaction>, selfNames: String? ->
+    AsyncFunction("mergeFromCloud") { userId: String, categories: List<CloudCategory>, transactions: List<CloudTransaction> ->
       Ledger.write(context) { db ->
         // Only into the ledger it was fetched for; the owner may have changed while the fetch ran.
-        if (Account.userId(context) != userId) false else LedgerMerge.mergeCloud(db, userId, categories, transactions, selfNames)
+        if (Account.userId(context) != userId) false else LedgerMerge.mergeCloud(db, userId, categories, transactions)
       }
     }
 

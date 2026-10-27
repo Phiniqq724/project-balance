@@ -1,10 +1,12 @@
+import FileExport from '@expo/material-symbols/file_export.xml';
+import FileOpen from '@expo/material-symbols/file_open.xml';
 import { Button, Column, ModalBottomSheet, Row, TextButton } from '@expo/ui/jetpack-compose';
 import { fillMaxWidth, padding } from '@expo/ui/jetpack-compose/modifiers';
 import { Directory, File } from 'expo-file-system';
 import { useState } from 'react';
 
 import type { LedgerImportPreview } from '../../modules/balance-core/src/BalanceCoreModule';
-import { LinkRow, Rule, Label } from '@/components/kit';
+import { Label, SettingsDivider, SettingsRow } from '@/components/kit';
 import { BalanceCore } from '@/lib/ledger';
 import { color, space } from '@/theme';
 
@@ -28,7 +30,7 @@ function describe(error: unknown) {
   return code === 'ERR_NOT_LEDGER_FILE' ? 'Not a Balance sheet' : 'Failed';
 }
 
-/** Profile rows: save the active ledger as .xlsx, or merge one back in. Works in cloud and local mode. */
+/** Profile rows, for a SettingsGroup: save the active ledger as .xlsx, or merge one back in. Works in cloud and local mode. */
 export function DataRows() {
   const [exportNote, setExportNote] = useState<string | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
@@ -84,10 +86,23 @@ export function DataRows() {
 
   return (
     <>
-      <LinkRow label="Export" value={exportNote ?? '.xlsx'} onPress={exportFile} />
-      <Rule />
-      <LinkRow label="Import" value={importNote ?? '.xlsx'} onPress={pickFile} />
-      <Rule />
+      <SettingsRow
+        icon={FileExport}
+        title="Export"
+        subtitle="Save as .xlsx"
+        status={exportNote ?? undefined}
+        statusTone={exportNote === 'Failed' ? 'danger' : 'muted'}
+        onPress={exportFile}
+      />
+      <SettingsDivider />
+      <SettingsRow
+        icon={FileOpen}
+        title="Import"
+        subtitle="Add from .xlsx"
+        status={importNote ?? undefined}
+        statusTone={importNote === 'Failed' || importNote === 'Not a Balance sheet' ? 'danger' : 'muted'}
+        onPress={pickFile}
+      />
 
       {pending && (
         <ModalBottomSheet onDismissRequest={() => setPending(null)} containerColor={color.surface} skipPartiallyExpanded>

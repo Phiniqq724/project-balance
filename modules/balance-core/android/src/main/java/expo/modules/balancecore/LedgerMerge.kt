@@ -50,7 +50,6 @@ internal object LedgerMerge {
     userId: String,
     categories: List<CloudCategory>,
     transactions: List<CloudTransaction>,
-    selfNames: String?,
   ): Boolean {
     val sqlite = db.writableDatabase
     sqlite.beginTransaction()
@@ -104,7 +103,6 @@ internal object LedgerMerge {
       }
       linkPairs(sqlite, pairs)
 
-      if (!selfNames.isNullOrBlank() && db.selfNames().isEmpty()) db.setSetting(Settings.SELF_NAMES, selfNames)
       db.setSetting(PULLED_FROM, userId)
       sqlite.setTransactionSuccessful()
     } finally {
@@ -176,8 +174,6 @@ internal object LedgerMerge {
 
     val watched = (db.watchedPackages() + Settings.splitList(srcSetting(Settings.WATCHED_PACKAGES))).distinct()
     db.setSetting(Settings.WATCHED_PACKAGES, watched.joinToString(","))
-    val names = (db.selfNames() + Settings.splitList(srcSetting(Settings.SELF_NAMES), '\n')).distinct()
-    if (names.isNotEmpty()) db.setSetting(Settings.SELF_NAMES, names.joinToString("\n"))
   }
 
   /** Points each transaction (by notification uid) at its transfer partner, where both exist and it has none yet. */

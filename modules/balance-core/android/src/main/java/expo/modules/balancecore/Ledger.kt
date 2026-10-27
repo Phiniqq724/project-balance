@@ -194,7 +194,6 @@ internal object Ledger {
 
   private fun insertTransaction(db: BalanceDb, rawId: Long, n: RawNotification, tx: ParsedTransaction): Long {
     val sqlite = db.writableDatabase
-    val isSelf = tx.isPersonTransfer && SelfNameMatcher.matches(tx.counterparty, db.selfNames())
     val txId = sqlite.insert("transactions", null, ContentValues().apply {
       put("raw_id", rawId)
       put("source", n.pkg)
@@ -203,7 +202,7 @@ internal object Ledger {
       put("counterparty", tx.counterparty)
       put("bank_category", tx.bankCategory)
       put("category_id", categorize(loadRules(db), tx.counterparty, tx.bankCategory))
-      put("is_transfer", if (isSelf) 1 else 0)
+      put("is_transfer", 0)
       put("occurred_at", n.postedAt)
     })
     pairTransfer(sqlite, txId, n.pkg, tx, n.postedAt)

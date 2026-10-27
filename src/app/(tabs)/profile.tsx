@@ -1,5 +1,8 @@
 import Add from '@expo/material-symbols/add.xml';
 import Check from '@expo/material-symbols/check.xml';
+import Notifications from '@expo/material-symbols/notifications.xml';
+import NotificationsOff from '@expo/material-symbols/notifications_off.xml';
+import Refresh from '@expo/material-symbols/refresh.xml';
 import {
   Box,
   Button,
@@ -30,7 +33,6 @@ import {
   weight,
   width,
 } from '@expo/ui/jetpack-compose/modifiers';
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 
@@ -39,12 +41,11 @@ import { AccountSwitch, LocalHeader } from '@/components/account-switch';
 import { AiReviewRow } from '@/components/ai-review-row';
 import { DataRows } from '@/components/data-rows';
 import { CategorySheet, fieldColors, fieldText } from '@/components/category-sheet';
-import { Chip, Failed, Label, LinkRow, Loading, Rule, Screen } from '@/components/kit';
+import { Chip, Failed, Label, Loading, Screen, SettingsGroup, SettingsRow } from '@/components/kit';
 import {
   BalanceCore,
   getCategories,
   getList,
-  getUnparsedCount,
   MONEY_APPS,
   SETTINGS,
   sourceLabel,
@@ -57,14 +58,12 @@ import { useLedger } from '@/lib/use-ledger';
 import { color, space } from '@/theme';
 
 async function loadSettings() {
-  const [watched, selfNames, categories, unparsed, apps] = await Promise.all([
+  const [watched, categories, apps] = await Promise.all([
     getList(SETTINGS.watchedPackages),
-    getList(SETTINGS.selfNames, '\n'),
     getCategories(),
-    getUnparsedCount(),
     BalanceCore.installedApps(),
   ]);
-  return { watched, selfNames, categories, unparsed, apps, hasAccess: BalanceCore.hasNotificationAccess() };
+  return { watched, categories, apps, hasAccess: BalanceCore.hasNotificationAccess() };
 }
 
 type Data = Awaited<ReturnType<typeof loadSettings>>;
@@ -98,9 +97,6 @@ function ProfileBody({ data }: { data: Data }) {
 
         <Apps installed={data.apps} initial={data.watched} />
 
-        <Head title="Your name" />
-        <SelfNames initial={data.selfNames} />
-
         <Head title="Categories" detail={String(data.categories.length)} />
         <FlowRow
           horizontalArrangement={{ spacedBy: 6 }}
@@ -112,21 +108,22 @@ function ProfileBody({ data }: { data: Data }) {
           <Chip label="+ New" selected={false} onPress={() => setEditing('new')} />
         </FlowRow>
 
-        <Spacer modifiers={[height(40)]} />
-        <Rule />
-        <LinkRow label="Not understood" value={String(data.unparsed)} onPress={() => router.push('/unparsed')} />
-        <Rule />
-        <Reprocess />
-        <Rule />
-        <DataRows />
-        {signedIn && (
-          <>
-            <AiReviewRow />
-            <Rule />
-          </>
-        )}
-        <AccountSwitch cloud={signedIn} />
-        <Rule />
+        <Head title="Reading" />
+        <SettingsGroup>
+          {signedIn && <AiReviewRow />}
+          <Reprocess />
+        </SettingsGroup>
+
+        <Head title="Data" />
+        <SettingsGroup>
+          <DataRows />
+        </SettingsGroup>
+
+        <Head title="Account" />
+        <SettingsGroup>
+          <AccountSwitch cloud={signedIn} />
+        </SettingsGroup>
+
         <Spacer modifiers={[height(space.navClearance)]} />
       </Column>
 
@@ -158,23 +155,15 @@ function Head({ title, detail }: { title: string; detail?: string }) {
 
 function Access({ on }: { on: boolean }) {
   return (
-    <Row
-      verticalAlignment="center"
-      modifiers={[
-        fillMaxWidth(),
-        padding(space.page, 0, space.page, 0),
-        clip(Shapes.RoundedCorner(12)),
-        background(color.surface),
-        clickable(() => BalanceCore.openNotificationAccessSettings()),
-        padding(16, 14, 16, 14),
-      ]}>
-      <Label weight="medium" tone={on ? 'text' : 'danger'} modifiers={[weight(1)]}>
-        {on ? 'Reading notifications' : 'Notification access off'}
-      </Label>
-      <Label size={14} weight="medium" tone="muted">
-        {on ? 'Manage' : 'Turn on'}
-      </Label>
-    </Row>
+    <SettingsGroup>
+      <SettingsRow
+        icon={on ? Notifications : NotificationsOff}
+        title={on ? 'Reading notifications' : 'Notification access off'}
+        tone={on ? 'text' : 'danger'}
+        status={on ? 'Manage' : 'Turn on'}
+        onPress={() => BalanceCore.openNotificationAccessSettings()}
+      />
+    </SettingsGroup>
   );
 }
 
@@ -336,58 +325,6 @@ function AppPicker({ apps, onPick, onClose }: { apps: InstalledApp[]; onPick: (p
   );
 }
 
-function SelfNames({ initial }: { initial: string[] }) {
-  const field = useNativeState(initial.join('\n'));
-  const [value, setValue] = useState(initial.join('\n'));
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
-  const dirty = value.trim() !== initial.join('\n');
-
-  const save = async () => {
-    setStatus('saving');
-    try {
-      const names = value
-        .split('\n')
-        .map((n) => n.trim())
-        .filter(Boolean)
-        .join('\n');
-      await BalanceCore.setSetting(SETTINGS.selfNames, names);
-      setStatus('saved');
-    } catch {
-      setStatus('failed');
-    }
-  };
-
-  return (
-    <Column modifiers={[fillMaxWidth(), padding(space.page, 0, space.page, 0)]} verticalArrangement={{ spacedBy: 8 }}>
-      <OutlinedTextField
-        value={field}
-        onValueChange={(v) => {
-          setValue(v);
-          setStatus('idle');
-        }}
-        minLines={1}
-        colors={fieldColors}
-        textStyle={fieldText}
-        keyboardOptions={{ capitalization: 'characters', autoCorrectEnabled: false }}
-        modifiers={[fillMaxWidth()]}>
-        <OutlinedTextField.Placeholder>
-          <Label tone="muted">As your bank prints it</Label>
-        </OutlinedTextField.Placeholder>
-      </OutlinedTextField>
-      <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
-        <Label size={13} tone={status === 'failed' ? 'danger' : 'muted'} modifiers={[weight(1)]}>
-          {status === 'failed' ? "Couldn't save." : status === 'saved' ? 'Saved' : 'Money sent here counts as a transfer'}
-        </Label>
-        {dirty && status !== 'saved' && (
-          <TextButton onClick={save} enabled={status !== 'saving'}>
-            <Label weight="medium">Save</Label>
-          </TextButton>
-        )}
-      </Row>
-    </Column>
-  );
-}
-
 function Reprocess() {
   const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
   const run = async () => {
@@ -400,8 +337,17 @@ function Reprocess() {
       setStatus('failed');
     }
   };
-  const value = { idle: undefined, running: 'Reading…', done: 'Done', failed: 'Failed' }[status];
-  return <LinkRow label="Re-read everything" value={value} onPress={run} />;
+  const text = { idle: undefined, running: 'Reading…', done: 'Done', failed: 'Failed' }[status];
+  return (
+    <SettingsRow
+      icon={Refresh}
+      title="Re-read everything"
+      subtitle="Run saved notifications again"
+      status={text}
+      statusTone={status === 'failed' ? 'danger' : 'muted'}
+      onPress={run}
+    />
+  );
 }
 
 function syncLabel(state: ReturnType<typeof useSyncStatus>): string {

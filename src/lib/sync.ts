@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
-import { BalanceCore, SETTINGS } from './ledger';
+import { BalanceCore } from './ledger';
 import { supabase } from './supabase';
 
 /**
@@ -36,7 +36,6 @@ type Mirror = {
   userId: string;
   categories: Map<string, string>;
   transactions: Map<string, string>;
-  selfNames: string | null;
   /** The rows behind the fingerprints, for a restore. */
   rows: { categories: CloudCategory[]; transactions: CloudTransaction[] };
 };
@@ -105,20 +104,17 @@ async function fetchAll<T>(table: string, columns: string): Promise<T[]> {
 }
 
 async function loadMirror(userId: string): Promise<Mirror> {
-  const [categories, transactions, settings] = await Promise.all([
+  const [categories, transactions] = await Promise.all([
     fetchAll<CloudCategory>('categories', 'id, name, keywords, position'),
     fetchAll<CloudTransaction>(
       'transactions',
       'id, source, direction, amount, counterparty, bank_category, category_id, category_locked, is_transfer, transfer_locked, pair_id, occurred_at'
     ),
-    supabase.from('user_settings').select('value').eq('key', SETTINGS.selfNames).maybeSingle(),
   ]);
-  if (settings.error) throw settings.error;
   return {
     userId,
     categories: new Map(categories.map((c) => [c.id, categoryPrint(c)])),
     transactions: new Map(transactions.map((t) => [t.id, transactionPrint(t)])),
-    selfNames: settings.data?.value ?? null,
     rows: { categories, transactions },
   };
 }
@@ -146,8 +142,7 @@ async function restore(m: Mirror) {
       transferLocked: t.transfer_locked,
       pairId: t.pair_id,
       occurredAt: Date.parse(t.occurred_at),
-    })),
-    m.selfNames
+    }))
   );
   if ((await BalanceCore.getSetting(PULLED_FROM)) !== m.userId) throw new Error('restore skipped');
   // The restored rows are on the phone now; drop the heavy copy.
@@ -190,21 +185,10 @@ async function push(userId: string) {
   if (mirror?.userId !== userId) mirror = await loadMirror(userId);
   const m = mirror;
   await restore(m);
-  const [categories, transactions, selfNames] = await Promise.all([
-    localCategories(),
-    localTransactions(),
-    BalanceCore.getSetting(SETTINGS.selfNames),
-  ]);
+  const [categories, transactions] = await Promise.all([localCategories(), localTransactions()]);
   // Categories first: transactions reference them.
   await pushTable('categories', userId, categories, m.categories, categoryPrint);
   await pushTable('transactions', userId, transactions, m.transactions, transactionPrint);
-  if ((selfNames ?? '') !== (m.selfNames ?? '')) {
-    const { error } = await supabase
-      .from('user_settings')
-      .upsert({ user_id: userId, key: SETTINGS.selfNames, value: selfNames ?? '' });
-    if (error) throw error;
-    m.selfNames = selfNames ?? '';
-  }
 }
 
 // ---- Status, for the profile screen -------------------------------------------------------------
