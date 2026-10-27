@@ -123,7 +123,7 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
             modifiers={[fillMaxWidth(), height(184), padding(space.page, 0, space.page, 0)]}
           />
           <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label="Spent" />
+            <LegendKey label="Spent" tint={color.accent} />
             <LegendKey label="Received" tint={color.income} />
           </Row>
 
@@ -288,7 +288,7 @@ function FlowSplit({ spent, received }: { spent: number; received: number }) {
       {spent + received > 0 && (
         <Row horizontalArrangement={{ spacedBy: 2 }} modifiers={[fillMaxWidth(), padding(space.page, 0, space.page, 0), height(6)]}>
           {received > 0 && <Box modifiers={[weight(received), height(6), clip(Shapes.RoundedCorner(2)), background(color.income)]} />}
-          {spent > 0 && <Box modifiers={[weight(spent), height(6), clip(Shapes.RoundedCorner(2)), background(color.text)]} />}
+          {spent > 0 && <Box modifiers={[weight(spent), height(6), clip(Shapes.RoundedCorner(2)), background(color.accent)]} />}
         </Row>
       )}
     </>

@@ -209,7 +209,7 @@ private fun DrawScope.drawBars(
     props.current.getOrNull(i)?.takeIf { it > 0 }?.let { v ->
       val h = max(((v / outPeak).toFloat() * (baseline - top - 2.dp.toPx())), 2.dp.toPx())
       drawRoundRect(
-        if (focus) colors.text else colors.muted.copy(alpha = 0.45f),
+        if (focus) colors.accent else colors.accent.copy(alpha = 0.35f),
         topLeft = Offset(x, baseline - 1.dp.toPx() - h),
         size = Size(barWidth, h),
         cornerRadius = radius
