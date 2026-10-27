@@ -11,7 +11,7 @@ export function TxRow({ tx, pair, onPress }: { tx: Transaction; pair?: Transacti
   let title = transactionTitle(tx);
   let meta: string;
   let amount = signed(tx.amount, tx.direction);
-  let tone: 'text' | 'muted' | 'accent' = tx.direction === 'in' ? 'accent' : 'text';
+  let tone: 'text' | 'muted' | 'income' = tx.direction === 'in' ? 'income' : 'text';
 
   if (pair) {
     title = `${sourceLabel(tx.source)} → ${sourceLabel(pair.source)}`;

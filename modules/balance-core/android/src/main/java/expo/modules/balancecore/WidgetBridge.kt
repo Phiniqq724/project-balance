@@ -24,7 +24,7 @@ import java.util.Locale
 internal object WidgetBridge {
   private const val PREFS = "expo.modules.widgets"
   private const val GAP_RATIO = 0.25f
-  private val HEAT = intArrayOf(0xFF1A1F23.toInt(), 0xFF0E4429.toInt(), 0xFF006D32.toInt(), 0xFF26A641.toInt(), 0xFF39D353.toInt())
+  private val HEAT = intArrayOf(0xFF2B2420.toInt(), 0xFF5C2D1C.toInt(), 0xFF93401F.toInt(), 0xFFD2582B.toInt(), 0xFFFF7444.toInt())
 
   @Synchronized
   fun refresh(context: Context) {

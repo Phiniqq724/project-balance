@@ -6,11 +6,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 out = sys.argv[1]
 S = 3  # Drawn at xxhdpi; Android scales drawable-nodpi to the picker cell.
-BG = '#0B0D0E'
-TEXT = '#E6EAEC'
-MUTED = '#8F989E'
-ACCENT = '#39D353'
-HEAT = ['#1A1F23', '#0E4429', '#006D32', '#26A641', '#39D353']
+BG = '#1A1614'
+TEXT = '#F3EBE2'
+MUTED = '#AC9F92'
+ACCENT = '#9BCB9F'
+HEAT = ['#2B2420', '#5C2D1C', '#93401F', '#D2582B', '#FF7444']
 FONTS = 'assets/fonts/Satoshi-{}.otf'
 
 

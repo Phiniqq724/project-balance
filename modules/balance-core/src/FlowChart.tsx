@@ -16,7 +16,7 @@ export type FlowChartProps = {
   textColor?: string;
   mutedColor?: string;
   gridColor?: string;
-  accentColor?: string;
+  incomeColor?: string;
   modifiers?: ModifierConfig[];
 };
 

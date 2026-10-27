@@ -16,13 +16,13 @@ const SpendGrid = (props: SpendGridProps) => {
   'widget';
   return (
     // A full-size button so a tap anywhere opens the app (the "open:" target comes from patches/expo-widgets).
-    <Button {...({ target: 'open:projectbalance://' } as object)} modifiers={[fillMaxSize(), background('#0B0D0E'), cornerRadius(20)]}>
+    <Button {...({ target: 'open:projectbalance://' } as object)} modifiers={[fillMaxSize(), background('#1A1614'), cornerRadius(20)]}>
       <Column modifiers={[fillMaxSize(), paddingAll(14)]}>
         <Row>
-          <Text color="#E6EAEC" style={{ fontSize: 15, fontWeight: '700' }}>
+          <Text color="#F3EBE2" style={{ fontSize: 15, fontWeight: '700' }}>
             {props.total}
           </Text>
-          <Text color="#8F989E" style={{ fontSize: 13 }}>
+          <Text color="#AC9F92" style={{ fontSize: 13 }}>
             {` in ${props.weeks} weeks  ·  ${props.today} today`}
           </Text>
         </Row>
@@ -35,7 +35,7 @@ const SpendGrid = (props: SpendGridProps) => {
             modifiers={[fillMaxSize()]}
           />
         ) : (
-          <Text color="#8F989E" style={{ fontSize: 13 }}>
+          <Text color="#AC9F92" style={{ fontSize: 13 }}>
             Open Balance once to draw the grid.
           </Text>
         )}
