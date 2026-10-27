@@ -2,7 +2,7 @@ import { Column, LazyColumn, Row } from '@expo/ui/jetpack-compose';
 import { background, fillMaxSize, fillMaxWidth, padding, paddingAll, weight } from '@expo/ui/jetpack-compose/modifiers';
 
 import { ReviewActions } from '@/components/review';
-import { useSession } from '@/lib/auth';
+import { useCloudUser } from '@/lib/auth';
 import { Failed, Label, Loading, Rule, Screen } from '@/components/kit';
 import { shortDate, time } from '@/lib/format';
 import { getUnparsed, sourceLabel } from '@/lib/ledger';
@@ -11,7 +11,7 @@ import { color, space } from '@/theme';
 
 export default function UnparsedScreen() {
   const state = useLedger(getUnparsed);
-  const cloud = !!useSession();
+  const cloud = !!useCloudUser();
 
   return (
     <Screen>

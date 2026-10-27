@@ -5,6 +5,7 @@ import {
   Column,
   HorizontalDivider,
   Host,
+  Row,
   Text,
   type TextProps,
 } from '@expo/ui/jetpack-compose';
@@ -16,6 +17,7 @@ import {
   fillMaxWidth,
   padding,
   paddingAll,
+  weight,
   Shapes,
 } from '@expo/ui/jetpack-compose/modifiers';
 import type { ReactNode } from 'react';
@@ -114,5 +116,20 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
         </Label>
       </Box>
     </Box>
+  );
+}
+
+export function LinkRow({ label, value, onPress }: { label: string; value?: string; onPress: () => void }) {
+  return (
+    <Row verticalAlignment="center" modifiers={[fillMaxWidth(), clickable(onPress), padding(space.page, 18, space.page, 18)]}>
+      <Label weight="medium" modifiers={[weight(1)]}>
+        {label}
+      </Label>
+      {value && (
+        <Label weight="medium" tone="muted">
+          {value}
+        </Label>
+      )}
+    </Row>
   );
 }

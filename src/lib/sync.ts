@@ -10,6 +10,7 @@ import { supabase } from './supabase';
  * the phone are soft-deleted. Raw notification text never leaves the phone.
  */
 
+const PULLED_FROM = 'cloud_pulled';
 const CHUNK = 500;
 const PAGE = 1000;
 const DEBOUNCE_MS = 3000;
@@ -36,6 +37,8 @@ type Mirror = {
   categories: Map<string, string>;
   transactions: Map<string, string>;
   selfNames: string | null;
+  /** The rows behind the fingerprints, for a restore. */
+  rows: { categories: CloudCategory[]; transactions: CloudTransaction[] };
 };
 
 const categoryPrint = (c: CloudCategory) => JSON.stringify([c.name, c.keywords, c.position]);
@@ -116,7 +119,39 @@ async function loadMirror(userId: string): Promise<Mirror> {
     categories: new Map(categories.map((c) => [c.id, categoryPrint(c)])),
     transactions: new Map(transactions.map((t) => [t.id, transactionPrint(t)])),
     selfNames: settings.data?.value ?? null,
+    rows: { categories, transactions },
   };
+}
+
+/**
+ * Pulls the cloud copy into a ledger that hasn't had it yet (new phone, reinstall, first sign-in
+ * after local mode). Must finish before the first push: the push soft-deletes cloud rows the
+ * phone lacks. Re-runnable: native side skips rows it already has and marks the ledger when done.
+ */
+async function restore(m: Mirror) {
+  if ((await BalanceCore.getSetting(PULLED_FROM)) === m.userId) return;
+  await BalanceCore.mergeFromCloud(
+    m.userId,
+    m.rows.categories,
+    m.rows.transactions.map((t) => ({
+      id: t.id,
+      source: t.source,
+      direction: t.direction,
+      amount: Number(t.amount),
+      counterparty: t.counterparty,
+      bankCategory: t.bank_category,
+      categoryId: t.category_id,
+      categoryLocked: t.category_locked,
+      isTransfer: t.is_transfer,
+      transferLocked: t.transfer_locked,
+      pairId: t.pair_id,
+      occurredAt: Date.parse(t.occurred_at),
+    })),
+    m.selfNames
+  );
+  if ((await BalanceCore.getSetting(PULLED_FROM)) !== m.userId) throw new Error('restore skipped');
+  // The restored rows are on the phone now; drop the heavy copy.
+  m.rows = { categories: [], transactions: [] };
 }
 
 function chunks<T>(items: T[]): T[][] {
@@ -154,6 +189,7 @@ async function pushTable<T extends { id: string }>(
 async function push(userId: string) {
   if (mirror?.userId !== userId) mirror = await loadMirror(userId);
   const m = mirror;
+  await restore(m);
   const [categories, transactions, selfNames] = await Promise.all([
     localCategories(),
     localTransactions(),

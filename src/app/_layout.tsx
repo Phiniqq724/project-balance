@@ -4,14 +4,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
-import { AuthProvider, useSession } from '@/lib/auth';
+import { AuthProvider, useAccount } from '@/lib/auth';
 import { BalanceCore } from '@/lib/ledger';
 import { color } from '@/theme';
 // Registers widget layouts with the native side so dev reloads pick up layout edits.
 import '@/widgets/month-pulse';
 import '@/widgets/spend-grid';
 
-// Held until we know who is signed in, so the sign-in screen never flashes for a signed-in user.
+// Held until we know which ledger is open, so the sign-in screen never flashes for a signed-in user.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
@@ -33,8 +33,8 @@ export default function RootLayout() {
 }
 
 function Routes() {
-  const session = useSession();
-  const ready = session !== undefined;
+  const account = useAccount();
+  const ready = account !== undefined;
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
@@ -43,11 +43,11 @@ function Routes() {
   if (!ready) return null;
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }}>
-      <Stack.Protected guard={!!session}>
+      <Stack.Protected guard={account?.mode !== 'none'}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="unparsed" />
       </Stack.Protected>
-      <Stack.Protected guard={!session}>
+      <Stack.Protected guard={account?.mode === 'none'}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
     </Stack>
