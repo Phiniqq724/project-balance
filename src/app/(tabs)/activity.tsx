@@ -100,7 +100,7 @@ export default function ActivityScreen() {
             </Label>
           </Row>
           <Row horizontalArrangement={{ spacedBy: 16 }}>
-            <Label size={14} weight="medium">{`−${digits(out)}`}</Label>
+            <Label size={14} weight="medium" tone="accent">{`−${digits(out)}`}</Label>
             <Label size={14} weight="medium" tone="income">{`+${digits(income)}`}</Label>
           </Row>
         </Column>
@@ -167,13 +167,13 @@ function DayHeader({ day, max }: { day: DayItem; max: number }) {
           </Label>
         )}
         {day.spent > 0 && (
-          <Label size={13} weight="medium" tone="muted">
+          <Label size={13} weight="medium" tone="accent">
             {`−${digits(day.spent)}`}
           </Label>
         )}
       </Row>
       <Box modifiers={[fillMaxWidth(), height(2), background(color.line)]}>
-        {day.spent > 0 && <Box modifiers={[fillMaxWidth(Math.max(day.spent / max, 0.01)), height(2), background(color.muted)]} />}
+        {day.spent > 0 && <Box modifiers={[fillMaxWidth(Math.max(day.spent / max, 0.01)), height(2), background(color.accent)]} />}
       </Box>
     </Column>
   );
