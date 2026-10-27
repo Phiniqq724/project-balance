@@ -1,0 +1,43 @@
+// Compose compiler plugin for the native chart view (same setup as @expo/ui).
+buildscript {
+  repositories {
+    mavenCentral()
+  }
+  dependencies {
+    classpath("org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin:${kotlinVersion}")
+  }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+group = 'expo.modules.balancecore'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.balancecore"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  buildFeatures {
+    compose true
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // expo-ui's ModifierList is built on React Native's Dynamic.
+  implementation 'com.facebook.react:react-android'
+  if (findProject(':expo-ui') != null) {
+    implementation project(':expo-ui')
+  } else {
+    implementation 'expo.modules.ui:expo.modules.ui:+'
+  }
+  // Match the versions @expo/ui ships with.
+  implementation 'androidx.compose.foundation:foundation-android:1.12.1'
+  implementation 'androidx.compose.ui:ui-android:1.12.1'
+}

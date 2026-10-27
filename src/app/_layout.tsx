@@ -1,18 +1,55 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { AppState } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { AuthProvider, useSession } from '@/lib/auth';
+import { BalanceCore } from '@/lib/ledger';
+import { color } from '@/theme';
+// Registers widget layouts with the native side so dev reloads pick up layout edits.
+import '@/widgets/month-pulse';
+import '@/widgets/spend-grid';
 
-SplashScreen.preventAutoHideAsync();
+// Held until we know who is signed in, so the sign-in screen never flashes for a signed-in user.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
+  // Widgets can't tell the app they were resized, so redraw them whenever the app is opened.
+  useEffect(() => {
+    BalanceCore.refreshWidgets().catch(() => {});
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') BalanceCore.refreshWidgets().catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <AuthProvider>
+      <StatusBar style="light" />
+      <Routes />
+    </AuthProvider>
+  );
+}
+
+function Routes() {
+  const session = useSession();
+  const ready = session !== undefined;
+
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
+
+  if (!ready) return null;
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }}>
+      <Stack.Protected guard={!!session}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="unparsed" />
+      </Stack.Protected>
+      <Stack.Protected guard={!session}>
+        <Stack.Screen name="sign-in" />
+      </Stack.Protected>
+    </Stack>
   );
 }

@@ -1,0 +1,9 @@
+expo.modules.balancecore.balance-core-pngs-0 /Users/sandy/Projects/Personal/project-balance/modules/balance-core/android/build/generated/res/pngs/debug
+expo.modules.balancecore.balance-core-updated_navigation_xml-1 /Users/sandy/Projects/Personal/project-balance/modules/balance-core/android/build/generated/updated_navigation_xml/debug
+expo.modules.balancecore.balance-core-mergeDebugResources-2 /Users/sandy/Projects/Personal/project-balance/modules/balance-core/android/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+expo.modules.balancecore.balance-core-mergeDebugResources-3 /Users/sandy/Projects/Personal/project-balance/modules/balance-core/android/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+expo.modules.balancecore.balance-core-debug-4 /Users/sandy/Projects/Personal/project-balance/modules/balance-core/android/build/intermediates/merged_res/debug/mergeDebugResources
+expo.modules.balancecore.balance-core-debug-5 /Users/sandy/Projects/Personal/project-balance/modules/balance-core/android/build/intermediates/packaged_res/debug/packageDebugResources
+expo.modules.balancecore.balance-core-debug-6 /Users/sandy/Projects/Personal/project-balance/modules/balance-core/android/src/debug/res
+expo.modules.balancecore.balance-core-main-7 /Users/sandy/Projects/Personal/project-balance/modules/balance-core/android/src/main/res
+gradleHome-0 /Users/sandy/.gradle
