@@ -1,5 +1,5 @@
-import { Button, Column, ModalBottomSheet, OutlinedTextField, Row, TextButton, useNativeState } from '@expo/ui/jetpack-compose';
-import { fillMaxWidth, padding } from '@expo/ui/jetpack-compose/modifiers';
+import { Button, CircularProgressIndicator, Column, ModalBottomSheet, OutlinedTextField, Row, TextButton, useNativeState } from '@expo/ui/jetpack-compose';
+import { fillMaxWidth, padding, size } from '@expo/ui/jetpack-compose/modifiers';
 import { useState } from 'react';
 
 import { fieldColors, fieldText } from '@/components/category-sheet';
@@ -47,9 +47,12 @@ export function ReviewActions({ n }: { n: RawNotification }) {
 
   if (n.review?.state === 'pending') {
     return (
-      <Label size={14} tone="muted">
-        Reading…
-      </Label>
+      <Row verticalAlignment="center" horizontalArrangement={{ spacedBy: 10 }}>
+        <CircularProgressIndicator color={color.muted} strokeWidth={2} modifiers={[size(16, 16)]} />
+        <Label size={14} tone="muted">
+          Reading…
+        </Label>
+      </Row>
     );
   }
 

@@ -41,11 +41,11 @@ import kotlin.math.roundToInt
 
 @OptimizedComposeProps
 data class FlowChartProps(
-  /** "line": cumulative spend vs last period. "bars": spend up, income down, per day. */
+  /** "line": spend per slot vs last period. "bars": spend up, income down, per day. */
   val mode: String = "line",
-  /** Line: cumulative spend so far (may stop before the end). Bars: spend per slot. */
+  /** Line: spend per slot so far (may stop before the end). Bars: spend per slot. */
   val current: List<Double> = emptyList(),
-  /** Line: last period's cumulative spend, full length. */
+  /** Line: last period's spend per slot, full length. */
   val previous: List<Double> = emptyList(),
   /** Bars: income per slot, drawn below the baseline. */
   val income: List<Double> = emptyList(),
@@ -60,7 +60,7 @@ data class FlowChartProps(
   val mutedColor: String = "#AC9F92",
   val gridColor: String = "#3A322C",
   val incomeColor: String = "#9BCB9F",
-  /** The current period: line, dots and spend bars. */
+  /** The "today" dot and the scrub dot. */
   val accentColor: String = "#FF7444",
   val modifiers: ModifierList = emptyList()
 ) : ComposeProps
@@ -169,8 +169,8 @@ private fun DrawScope.drawLine(
       lineTo(slotCenter(size.width, count, 0), bottom)
       close()
     }
-    drawPath(area, Brush.verticalGradient(listOf(colors.accent.copy(alpha = 0.14f), Color.Transparent), startY = top, endY = bottom))
-    drawPath(line, colors.accent, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(area, Brush.verticalGradient(listOf(colors.text.copy(alpha = 0.14f), Color.Transparent), startY = top, endY = bottom))
+    drawPath(line, colors.text, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
     drawCircle(colors.accent, radius = 3.5.dp.toPx(), center = Offset(lastX, y(props.current.last())))
   }
 
@@ -209,7 +209,7 @@ private fun DrawScope.drawBars(
     props.current.getOrNull(i)?.takeIf { it > 0 }?.let { v ->
       val h = max(((v / outPeak).toFloat() * (baseline - top - 2.dp.toPx())), 2.dp.toPx())
       drawRoundRect(
-        if (focus) colors.accent else colors.accent.copy(alpha = 0.35f),
+        if (focus) colors.text else colors.muted.copy(alpha = 0.45f),
         topLeft = Offset(x, baseline - 1.dp.toPx() - h),
         size = Size(barWidth, h),
         cornerRadius = radius
@@ -259,7 +259,7 @@ private fun niceCeil(value: Double): Double {
 
 /**
  * Monotone cubic curve (Fritsch–Carlson) through the points: smooth, but it never overshoots,
- * so a running total that only climbs is never drawn dipping between days.
+ * so a quiet day is never drawn dipping below zero between busy ones.
  */
 private fun smoothPath(points: List<Offset>): Path = Path().apply {
   if (points.isEmpty()) return@apply

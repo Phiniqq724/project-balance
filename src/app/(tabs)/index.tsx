@@ -1,4 +1,4 @@
-import { Box, Button, Column, Row, Spacer, Text } from '@expo/ui/jetpack-compose';
+import { Box, Button, Column, Icon, Row, Spacer, Text } from '@expo/ui/jetpack-compose';
 import {
   background,
   clickable,
@@ -12,6 +12,7 @@ import {
   weight,
   width,
 } from '@expo/ui/jetpack-compose/modifiers';
+import Bell from '@expo/material-symbols/notifications.xml';
 import { router } from 'expo-router';
 import { useState } from 'react';
 
@@ -59,6 +60,10 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
     <Column modifiers={[fillMaxWidth(), verticalScroll()]}>
       {!data.hasAccess && <AccessBanner />}
 
+      <Row horizontalArrangement="end" modifiers={[fillMaxWidth(), padding(0, 4, 8, 0)]}>
+        <InboxBell count={data.unparsed} />
+      </Row>
+
       <PeriodTicker period={period} onChange={onPeriod} range={rangeLabel(a)} />
 
       <Column modifiers={[padding(space.page, 28, space.page, 0)]} verticalArrangement={{ spacedBy: 6 }}>
@@ -90,7 +95,7 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
             modifiers={[fillMaxWidth(), height(224), padding(space.page, 24, space.page, 0)]}
           />
           <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label={meta.current} tint={color.accent} />
+            <LegendKey label={meta.current} />
             {a.hasPrevious && <LegendKey label={meta.previous} dashed />}
           </Row>
 
@@ -118,28 +123,11 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
             modifiers={[fillMaxWidth(), height(184), padding(space.page, 0, space.page, 0)]}
           />
           <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label="Spent" tint={color.accent} />
+            <LegendKey label="Spent" />
             <LegendKey label="Received" tint={color.income} />
           </Row>
 
           <StatPlate a={a} />
-        </>
-      )}
-
-
-      {data.unparsed > 0 && (
-        <>
-          <Spacer modifiers={[height(space.section)]} />
-          <Rule />
-          <Row
-            verticalAlignment="center"
-            modifiers={[fillMaxWidth(), clickable(() => router.push('/unparsed')), padding(space.page, 18, space.page, 18)]}>
-            <Label weight="medium" modifiers={[weight(1)]}>
-              {data.unparsed === 1 ? '1 notification not understood' : `${data.unparsed} notifications not understood`}
-            </Label>
-            <Label tone="muted">Review</Label>
-          </Row>
-          <Rule />
         </>
       )}
       <Spacer modifiers={[height(space.navClearance)]} />
@@ -179,10 +167,28 @@ function rangeLabel(a: Analysis) {
   return `${shortDate(first).slice(4)} – ${shortDate(last).slice(4)}`;
 }
 
+/** Bell at the top right; the badge counts notifications no rule understood. */
+function InboxBell({ count }: { count: number }) {
+  return (
+    <Box modifiers={[size(48, 48), clip(Shapes.Circle), clickable(() => router.push('/unparsed'))]} contentAlignment="center">
+      <Icon source={Bell} size={24} tint={color.text} contentDescription="Inbox" />
+      {count > 0 && (
+        <Box modifiers={[size(48, 48), padding(24, 6, 0, 0)]}>
+          <Box modifiers={[height(16), clip(Shapes.RoundedCorner(8)), background(color.accent)]} contentAlignment="center">
+            <Label size={10} weight="bold" color={color.bg} modifiers={[padding(count > 9 ? 4 : 5, 0, count > 9 ? 4 : 5, 0)]}>
+              {count > 99 ? '99+' : String(count)}
+            </Label>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 /** Text tabs, no pills: the selected period is bright and underlined, the rest recede. */
 function PeriodTicker({ period, onChange, range }: { period: Period; onChange: (p: Period) => void; range: string }) {
   return (
-    <Row verticalAlignment="center" modifiers={[fillMaxWidth(), padding(space.page - 8, 20, space.page, 0)]}>
+    <Row verticalAlignment="center" modifiers={[fillMaxWidth(), padding(space.page - 8, 4, space.page, 0)]}>
       {PERIODS.map((p) => {
         const on = p.value === period;
         return (
@@ -302,10 +308,10 @@ function Figure({ label, value, tone = 'text' }: { label: string; value: string;
   );
 }
 
-/** Greys from bright to dim, so category ranks read without spending the accent. */
+/** Warm creams from bright to dim, so category ranks read without spending the accent. */
 function shade(i: number, n: number) {
-  const from = [0xe6, 0xea, 0xec];
-  const to = [0x3a, 0x41, 0x46];
+  const from = [0xf3, 0xeb, 0xe2];
+  const to = [0x4a, 0x40, 0x3a];
   const t = n <= 1 ? 0 : i / (n - 1);
   return `#${from.map((c, k) => Math.round(c + (to[k] - c) * t).toString(16).padStart(2, '0')).join('')}`;
 }

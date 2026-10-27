@@ -122,14 +122,17 @@ export function analyze(all: Flow[], period: Period, now = new Date()) {
 
   const spendSlots = bucket(inPeriod, slots, 'out');
   const incomeSlots = bucket(inPeriod, slots, 'in');
-  const prevCum = cumulative(bucket(prevPeriod, prevSlots, 'out'));
+  const prevSpend = bucket(prevPeriod, prevSlots, 'out');
+  const prevCum = cumulative(prevSpend);
   const cum = cumulative(spendSlots).slice(0, nowIndex + 1);
 
   const spent = cum[cum.length - 1] ?? 0;
   const received = income.reduce((sum, f) => sum + f.amount, 0);
   // Same point in the last period. Longer months just repeat their final total.
   const prevAtNow = prevCum[Math.min(nowIndex, prevCum.length - 1)] ?? 0;
-  const previous = slots.map((_, i) => prevCum[Math.min(i, prevCum.length - 1)] ?? 0);
+  // The chart draws what was spent in each slot, not the running total.
+  const current = spendSlots.slice(0, nowIndex + 1);
+  const previous = slots.map((_, i) => prevSpend[i] ?? 0);
 
   const elapsedDays = Math.max(1, Math.ceil((Math.min(now.getTime(), to) - from) / 86_400_000));
   const biggest = out.reduce<Flow | null>((best, f) => (!best || f.amount > best.amount ? f : best), null);
@@ -143,11 +146,11 @@ export function analyze(all: Flow[], period: Period, now = new Date()) {
     paceDelta: prevAtNow > 0 ? (spent - prevAtNow) / prevAtNow : null,
     hasPrevious: prevPeriod.some((f) => f.direction === 'out'),
     line: {
-      current: cum,
+      current,
       previous,
       ticks: slots.map((s) => s.tick),
       readoutLabels: slots.map((s, i) => (i <= nowIndex ? s.name : `${prevSlots[Math.min(i, prevSlots.length - 1)].name}`)),
-      readoutValues: slots.map((_, i) => `Rp ${digits(i <= nowIndex ? cum[i] : previous[i])}`),
+      readoutValues: slots.map((_, i) => `Rp ${digits(i <= nowIndex ? current[i] : previous[i])}`),
     },
     bars: {
       spend: spendSlots,

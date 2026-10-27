@@ -2,7 +2,7 @@ import { createViewModifierEventListener, type ModifierConfig } from '@expo/ui/j
 import { requireNativeView } from 'expo';
 
 export type FlowChartProps = {
-  /** "line": cumulative spend vs last period. "bars": spend up, income down, per slot. */
+  /** "line": spend per slot vs last period. "bars": spend up, income down, per slot. */
   mode: 'line' | 'bars';
   current: number[];
   previous?: number[];
