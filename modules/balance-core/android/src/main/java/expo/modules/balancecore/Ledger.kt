@@ -37,7 +37,7 @@ internal object Ledger {
   }
 
   private fun ingest(context: Context, notifications: List<RawNotification>): Boolean {
-    if (Account.userId(context) == null) return false // Nobody to log it for.
+    if (Account.userId(context) == null) return false // No account or local mode chosen yet: nobody to log it for.
     val db = BalanceDb.get(context)
     val watched = db.watchedPackages()
     var changed = false
@@ -163,13 +163,22 @@ internal object Ledger {
     ).use { c ->
       buildMap { while (c.moveToNext()) put(c.getLong(0), Manual(c.getString(1), c.getInt(2) == 1, c.getInt(3), c.getInt(4) == 1)) }
     }
-    val raws = sqlite.rawQuery("SELECT id, package, title, body, posted_at FROM raw_notifications ORDER BY posted_at", null).use { c ->
+    // Restored rows have no text to parse; their transactions stay as they came from the cloud.
+    val raws = sqlite.rawQuery(
+      "SELECT id, package, title, body, posted_at FROM raw_notifications WHERE status != ? ORDER BY posted_at",
+      arrayOf(LedgerMerge.RESTORED)
+    ).use { c ->
       buildList { while (c.moveToNext()) add(c.getLong(0) to RawNotification(c.getString(1), c.getString(2), c.getString(3), c.getLong(4))) }
     }
 
     sqlite.beginTransaction()
     try {
-      sqlite.execSQL("DELETE FROM transactions")
+      sqlite.execSQL(
+        "DELETE FROM transactions WHERE raw_id NOT IN (SELECT id FROM raw_notifications WHERE status = ?)",
+        arrayOf(LedgerMerge.RESTORED)
+      )
+      // Ids are never reused (AUTOINCREMENT), so a restored row whose partner was just removed loses the link for good.
+      sqlite.execSQL("UPDATE transactions SET pair_id = NULL WHERE pair_id IS NOT NULL AND pair_id NOT IN (SELECT id FROM transactions)")
       val watched = db.watchedPackages()
       for ((rawId, n) in raws) {
         if (n.pkg in watched) {

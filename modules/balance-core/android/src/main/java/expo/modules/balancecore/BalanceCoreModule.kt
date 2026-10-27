@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.provider.Settings as AndroidSettings
 import expo.modules.kotlin.exception.Exceptions
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.ui.ExpoUIView
@@ -160,6 +161,21 @@ class BalanceCoreModule : Module() {
 
     AsyncFunction("setActiveUser") { userId: String? ->
       Ledger.switchUser(context, userId)
+    }
+
+    // Whose ledger is open: a user id, "local", or null before anything is chosen.
+    Function("activeUser") { Account.userId(context) }
+
+    AsyncFunction("mergeFromCloud") { userId: String, categories: List<CloudCategory>, transactions: List<CloudTransaction>, selfNames: String? ->
+      Ledger.write(context) { db ->
+        // Only into the ledger it was fetched for; the owner may have changed while the fetch ran.
+        if (Account.userId(context) != userId) false else LedgerMerge.mergeCloud(db, userId, categories, transactions, selfNames)
+      }
+    }
+
+    AsyncFunction("signInWithGoogle") Coroutine { serverClientId: String ->
+      val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+      GoogleSignIn.signIn(activity, serverClientId)
     }
 
     AsyncFunction("refreshWidgets") {

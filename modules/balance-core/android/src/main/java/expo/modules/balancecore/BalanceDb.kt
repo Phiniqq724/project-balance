@@ -10,7 +10,7 @@ import java.util.UUID
 /**
  * The only way into the ledger. The listener service and the JS side share this
  * one connection, so there is never a second SQLite library touching the file.
- * Each signed-in user gets their own file; see [Account].
+ * Each account, and local mode, gets its own file; see [Account].
  */
 internal class BalanceDb private constructor(context: Context, val name: String) :
   SQLiteOpenHelper(context.applicationContext, name, null, 2) {
@@ -89,16 +89,7 @@ internal class BalanceDb private constructor(context: Context, val name: String)
   }
 
   private fun seedCategories(db: SQLiteDatabase) {
-    val seed = listOf(
-      Triple("food", "Food", "gofood,grabfood,shopeefood,resto,restaurant,kopi,coffee,cafe,warung,bakery,mcd,kfc,starbucks,janji jiwa,fore coffee,food,makan"),
-      Triple("transport", "Transport", "gojek,goride,gocar,grab,maxim,krl,commuter,mrt,lrt,transjakarta,pertamina,shell,parkir,toll,tol,bluebird"),
-      Triple("groceries", "Groceries", "indomaret,alfamart,alfamidi,superindo,hypermart,lotte,ranch,grocer,sayur,pasar"),
-      Triple("shopping", "Shopping", "tokopedia,shopee,lazada,tiktok,blibli,zalora,uniqlo,ikea"),
-      Triple("bills", "Bills", "pln,listrik,pdam,telkomsel,indihome,xl,axis,smartfren,by.u,pulsa,bpjs,internet,first media,biznet"),
-      Triple("subscriptions", "Subscriptions", "netflix,spotify,youtube,google,apple,disney,vidio,chatgpt,openai,anthropic,claude"),
-      Triple("fees", "Fees", "admin fee,biaya admin,fee,biaya"),
-    )
-    seed.forEachIndexed { index, (id, name, keywords) ->
+    SEED_CATEGORIES.forEachIndexed { index, (id, name, keywords) ->
       db.insert("categories", null, ContentValues().apply {
         put("id", id)
         put("name", name)
@@ -148,7 +139,28 @@ internal class BalanceDb private constructor(context: Context, val name: String)
   companion object {
     @Volatile private var instance: BalanceDb? = null
 
-    /** The signed-in user's ledger. Signed out, an empty one that nothing writes to. */
+    /** Categories a new ledger starts with: id, name, keywords. */
+    val SEED_CATEGORIES = listOf(
+      Triple("food", "Food", "gofood,grabfood,shopeefood,resto,restaurant,kopi,coffee,cafe,warung,bakery,mcd,kfc,starbucks,janji jiwa,fore coffee,food,makan"),
+      Triple("transport", "Transport", "gojek,goride,gocar,grab,maxim,krl,commuter,mrt,lrt,transjakarta,pertamina,shell,parkir,toll,tol,bluebird"),
+      Triple("groceries", "Groceries", "indomaret,alfamart,alfamidi,superindo,hypermart,lotte,ranch,grocer,sayur,pasar"),
+      Triple("shopping", "Shopping", "tokopedia,shopee,lazada,tiktok,blibli,zalora,uniqlo,ikea"),
+      Triple("bills", "Bills", "pln,listrik,pdam,telkomsel,indihome,xl,axis,smartfren,by.u,pulsa,bpjs,internet,first media,biznet"),
+      Triple("subscriptions", "Subscriptions", "netflix,spotify,youtube,google,apple,disney,vidio,chatgpt,openai,anthropic,claude"),
+      Triple("fees", "Fees", "admin fee,biaya admin,fee,biaya"),
+    )
+
+    /** Opens a ledger other than the active one, for moving data between files. Writer thread only. */
+    fun <T> withFile(context: Context, name: String, block: (BalanceDb) -> T): T {
+      val db = BalanceDb(context, name)
+      try {
+        return block(db)
+      } finally {
+        db.close()
+      }
+    }
+
+    /** The active owner's ledger (a user, or [Account.LOCAL]). With no owner, an empty one that nothing writes to. */
     fun get(context: Context): BalanceDb {
       val name = fileName(Account.userId(context))
       instance?.takeIf { it.name == name }?.let { return it }
@@ -160,7 +172,8 @@ internal class BalanceDb private constructor(context: Context, val name: String)
       }
     }
 
-    fun fileName(userId: String?): String = if (userId == null) "balance-signed-out.db" else "balance-$userId.db"
+    /** "balance-<user id>.db", "balance-local.db" for local mode. */
+    fun fileName(owner: String?): String = if (owner == null) "balance-signed-out.db" else "balance-$owner.db"
 
     /** Closes the open ledger so its file can be moved or deleted. */
     fun closeCurrent() = synchronized(this) {

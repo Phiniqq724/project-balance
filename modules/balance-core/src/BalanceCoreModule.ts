@@ -26,8 +26,41 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   getAuthItem(key: string): string | null;
   setAuthItem(key: string, value: string): void;
   removeAuthItem(key: string): void;
-  /** Switches the ledger file to this user's (null when signed out). */
+  /**
+   * Switches the ledger file to this user's, or to the phone-only ledger with `LOCAL_OWNER` (null: nothing chosen).
+   * local -> user merges the phone-only ledger into the user's; user -> local carries the user's ledger over.
+   */
   setActiveUser(userId: string | null): Promise<void>;
+  /** Whose ledger is open: a user id, `LOCAL_OWNER`, or null. Kept natively so the listener and widgets agree. */
+  activeUser(): string | null;
+  /** Adds cloud rows this ledger lacks, once per ledger and user. Resolves false if already done or the owner changed. */
+  mergeFromCloud(
+    userId: string,
+    categories: CloudCategoryRow[],
+    transactions: CloudTransactionRow[],
+    selfNames: string | null
+  ): Promise<boolean>;
+  /** Credential Manager "Sign in with Google". Rejects with code ERR_CANCELLED, ERR_NO_ACCOUNT or ERR_GOOGLE_SIGN_IN. */
+  signInWithGoogle(serverClientId: string): Promise<{ idToken: string; nonce: string }>;
 }
+
+export const LOCAL_OWNER = 'local';
+
+export type CloudCategoryRow = { id: string; name: string; keywords: string; position: number };
+export type CloudTransactionRow = {
+  id: string;
+  source: string;
+  direction: 'in' | 'out';
+  amount: number;
+  counterparty: string | null;
+  bankCategory: string | null;
+  categoryId: string | null;
+  categoryLocked: boolean;
+  isTransfer: boolean;
+  transferLocked: boolean;
+  pairId: string | null;
+  /** Epoch milliseconds. */
+  occurredAt: number;
+};
 
 export default requireNativeModule<BalanceCoreModule>('BalanceCore');
