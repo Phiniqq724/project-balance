@@ -13,7 +13,7 @@ import java.util.UUID
  * Each signed-in user gets their own file; see [Account].
  */
 internal class BalanceDb private constructor(context: Context, val name: String) :
-  SQLiteOpenHelper(context.applicationContext, name, null, 2) {
+  SQLiteOpenHelper(context.applicationContext, name, null, 3) {
 
   override fun onConfigure(db: SQLiteDatabase) {
     db.setForeignKeyConstraintsEnabled(true)
@@ -66,6 +66,7 @@ internal class BalanceDb private constructor(context: Context, val name: String)
     )
     db.execSQL("CREATE INDEX transactions_occurred_at ON transactions(occurred_at)")
     db.execSQL("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    createAiReviews(db)
 
     seedCategories(db)
     db.insert("settings", null, ContentValues().apply {
@@ -86,6 +87,31 @@ internal class BalanceDb private constructor(context: Context, val name: String)
       }
       db.execSQL("CREATE UNIQUE INDEX raw_notifications_uid ON raw_notifications(uid)")
     }
+    if (oldVersion < 3) createAiReviews(db)
+  }
+
+  /**
+   * AI suggestions for notifications no rule understood (cloud mode only). Nothing here reaches
+   * the ledger until the user confirms it; the confirmed values are kept so re-reading keeps them.
+   * state: pending -> suggested | failed -> confirmed | rejected, or dismissed (a confident "ad").
+   */
+  private fun createAiReviews(db: SQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE ai_reviews (
+        raw_id INTEGER PRIMARY KEY REFERENCES raw_notifications(id) ON DELETE CASCADE,
+        state TEXT NOT NULL DEFAULT 'pending',
+        kind TEXT,
+        direction TEXT,
+        amount INTEGER,
+        counterparty TEXT,
+        confidence REAL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL DEFAULT 0
+      )
+      """
+    )
+    db.execSQL("CREATE INDEX ai_reviews_state ON ai_reviews(state)")
   }
 
   private fun seedCategories(db: SQLiteDatabase) {
@@ -127,6 +153,8 @@ internal class BalanceDb private constructor(context: Context, val name: String)
 
   fun watchedPackages(): Set<String> =
     Settings.splitList(getSetting(Settings.WATCHED_PACKAGES)).toSet()
+
+  fun aiEnabled(): Boolean = getSetting(Settings.AI_REVIEW) == "1"
 
   fun selfNames(): List<String> = Settings.splitList(getSetting(Settings.SELF_NAMES), '\n')
 
@@ -188,6 +216,8 @@ internal class BalanceDb private constructor(context: Context, val name: String)
 internal object Settings {
   const val WATCHED_PACKAGES = "watched_packages"
   const val SELF_NAMES = "self_names"
+  // "1" = send money-looking notifications no rule understood to the classify-notification function.
+  const val AI_REVIEW = "ai_review"
 
   val DEFAULT_PACKAGES = listOf(
     "com.jago.digitalBanking",

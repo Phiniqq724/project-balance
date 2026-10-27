@@ -7,7 +7,9 @@ type BalanceCoreEvents = {
 export type SqlValue = string | number | null;
 export type Row = Record<string, SqlValue>;
 
-export type InstalledApp = { package: string; label: string; icon: string | null };
+export type AiKind = 'income' | 'expense' | 'transfer' | 'ad_or_other';
+
+export type InstalledApp ={ package: string; label: string; icon: string | null };
 
 declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   hasNotificationAccess(): boolean;
@@ -23,6 +25,19 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   setSetting(key: string, value: string): Promise<void>;
   reprocessAll(): Promise<void>;
   refreshWidgets(): Promise<void>;
+  /** Turns AI review on or off and re-reads every notification. */
+  setAiReview(on: boolean): Promise<void>;
+  aiSuggest(
+    rawId: number,
+    kind: AiKind,
+    direction: 'in' | 'out',
+    amount: number,
+    counterparty: string | null,
+    confidence: number
+  ): Promise<void>;
+  aiFailed(rawId: number): Promise<void>;
+  /** The user's answer; 'ad_or_other' = not a transaction. Anything else is logged as given. */
+  aiResolve(rawId: number, kind: AiKind, direction: 'in' | 'out', amount: number, counterparty: string | null): Promise<void>;
   getAuthItem(key: string): string | null;
   setAuthItem(key: string, value: string): void;
   removeAuthItem(key: string): void;
