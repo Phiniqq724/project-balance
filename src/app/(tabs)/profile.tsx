@@ -37,6 +37,7 @@ import { useWindowDimensions } from 'react-native';
 import type { InstalledApp } from '../../../modules/balance-core/src/BalanceCoreModule';
 import { AccountSwitch, LocalHeader } from '@/components/account-switch';
 import { AiReviewRow } from '@/components/ai-review-row';
+import { DataRows } from '@/components/data-rows';
 import { CategorySheet, fieldColors, fieldText } from '@/components/category-sheet';
 import { Chip, Failed, Label, LinkRow, Loading, Rule, Screen } from '@/components/kit';
 import {
@@ -117,6 +118,7 @@ function ProfileBody({ data }: { data: Data }) {
         <Rule />
         <Reprocess />
         <Rule />
+        <DataRows />
         {signedIn && (
           <>
             <AiReviewRow />
