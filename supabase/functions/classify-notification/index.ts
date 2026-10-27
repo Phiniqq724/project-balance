@@ -9,7 +9,11 @@ import { MAX_TEXT, redact } from '../_shared/redact.ts';
 // Newest stable Flash-Lite that is cheaper than 3.5 ($0.25 / $1.50 per 1M tokens paid; free tier
 // available, per ai.google.dev/gemini-api/docs/pricing). gemini-2.5-flash-lite is cheaper but older. Override with the GEMINI_MODEL secret without redeploying code.
 const MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.1-flash-lite';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+// Free-tier models get overloaded ("high demand" 503s) or hang; the older Flash-Lite is the backup.
+const FALLBACK = Deno.env.get('GEMINI_FALLBACK_MODEL') ?? 'gemini-2.5-flash-lite';
+const geminiUrl = (model: string) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+// Well under the edge function's wall-clock limit, so a hung call can't kill the worker.
+const TIMEOUT_MS = 25_000;
 
 const MAX_ITEMS = 10;
 const PER_HOUR = 30;
@@ -148,10 +152,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .order('created_at', { ascending: false })
       .limit(EXAMPLES);
 
-    const gemini = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
+    const request = JSON.stringify({
         systemInstruction: { parts: [{ text: INSTRUCTIONS + examplesBlock((examples ?? []) as Example[]) }] },
         contents: [
           {
@@ -164,16 +165,33 @@ Deno.serve(async (req: Request): Promise<Response> => {
           responseMimeType: 'application/json',
           responseSchema: RESPONSE_SCHEMA,
         },
-      }),
-    });
+      });
+    let gemini: Response | null = null;
+    let model = MODEL;
+    for (const candidate of [MODEL, FALLBACK]) {
+      model = candidate;
+      try {
+        gemini = await fetch(geminiUrl(candidate), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+          body: request,
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+      } catch (e) {
+        console.error('gemini', candidate, 'timed out or failed', e);
+        gemini = null;
+        continue;
+      }
+      if (gemini.ok) break;
+      console.error('gemini', candidate, gemini.status, await gemini.clone().text().catch(() => ''));
+      // Overloaded or rate limited: the other model has its own quota and capacity.
+      if (gemini.status !== 429 && gemini.status < 500) break;
+    }
 
-    if (gemini.status === 429) {
-      return Response.json({ error: 'model_busy' }, { status: 429, headers: { 'Retry-After': '60' } });
+    if (!gemini || gemini.status === 429 || gemini.status >= 500) {
+      return Response.json({ error: 'model_busy' }, { status: 503, headers: { 'Retry-After': '60' } });
     }
-    if (!gemini.ok) {
-      console.error('gemini', gemini.status, await gemini.text().catch(() => ''));
-      return Response.json({ error: 'model' }, { status: 502 });
-    }
+    if (!gemini.ok) return Response.json({ error: 'model' }, { status: 502 });
 
     const payload = await gemini.json();
     const text: string =
@@ -196,5 +214,5 @@ Deno.serve(async (req: Request): Promise<Response> => {
         results.push(r);
       }
     }
-    return Response.json({ model: MODEL, results });
+    return Response.json({ model, results });
 });

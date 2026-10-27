@@ -16,7 +16,7 @@ import type { AiKind } from '../../modules/balance-core/src/BalanceCoreModule';
 
 const BATCH = 10;
 const DEBOUNCE_MS = 1500;
-const BACKOFF_MS = [60_000, 5 * 60_000, 30 * 60_000];
+const BACKOFF_MS = [30_000, 2 * 60_000, 5 * 60_000];
 
 type Answer = {
   id: string;
@@ -44,11 +44,11 @@ async function pendingBatch(): Promise<{ id: number; app: string; text: string }
   }));
 }
 
-/** Seconds the server asked us to wait, or null when the failure is not a rate limit. */
+/** Seconds the server asked us to wait (rate limit or model busy), or null for other failures. */
 async function retryAfter(error: unknown): Promise<number | null> {
   if (!(error instanceof FunctionsHttpError)) return null;
   const response = error.context as Response;
-  if (response.status !== 429) return null;
+  if (response.status !== 429 && response.status !== 503) return null;
   const header = Number(response.headers.get('Retry-After'));
   return Number.isFinite(header) && header > 0 ? header : 60;
 }
