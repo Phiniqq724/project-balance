@@ -45,3 +45,9 @@ notif-*.txt
 
 # env
 .env
+
+# agent worktrees
+.claude/worktrees/
+
+# module build output
+modules/*/android/build/

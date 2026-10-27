@@ -1,17 +1,18 @@
 import type { MaterialColors } from '@expo/ui/jetpack-compose';
 
-/** Instrument: cool graphite, numbers first, green only where money grows or spending heats up. */
+/** Ember: warm charcoal, orange only for spending heat, sage for money in, pink for errors. */
 export const color = {
-  bg: '#0B0D0E',
-  surface: '#131618',
-  raised: '#1B1F22',
-  line: '#23282C',
-  selected: '#2C3236',
-  text: '#E6EAEC',
-  muted: '#8F989E',
-  accent: '#39D353',
-  danger: '#F2867A',
-  heat: ['#1A1F23', '#0E4429', '#006D32', '#26A641', '#39D353'],
+  bg: '#1A1614',
+  surface: '#221D1A',
+  raised: '#2B2521',
+  line: '#3A322C',
+  selected: '#463C35',
+  text: '#F3EBE2',
+  muted: '#AC9F92',
+  accent: '#FF7444',
+  income: '#9BCB9F',
+  danger: '#F07AAE',
+  heat: ['#2B2420', '#5C2D1C', '#93401F', '#D2582B', '#FF7444'],
 } as const;
 
 /** Satoshi weights are registered as separate families by the expo-font plugin. */

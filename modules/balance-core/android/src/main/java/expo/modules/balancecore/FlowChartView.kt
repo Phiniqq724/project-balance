@@ -56,10 +56,12 @@ data class FlowChartProps(
   val readoutValues: List<String> = emptyList(),
   /** Slot shown when nobody is touching the chart. */
   val defaultIndex: Int = -1,
-  val textColor: String = "#E6EAEC",
-  val mutedColor: String = "#8F989E",
-  val gridColor: String = "#23282C",
-  val accentColor: String = "#39D353",
+  val textColor: String = "#F3EBE2",
+  val mutedColor: String = "#AC9F92",
+  val gridColor: String = "#3A322C",
+  val incomeColor: String = "#9BCB9F",
+  /** The current period: line, dots and spend bars. */
+  val accentColor: String = "#FF7444",
   val modifiers: ModifierList = emptyList()
 ) : ComposeProps
 
@@ -80,7 +82,7 @@ fun FunctionalComposableScope.FlowChartContent(props: FlowChartProps) {
   var touched by remember { mutableStateOf<Int?>(null) }
   val selected = (touched ?: props.defaultIndex).takeIf { it in 0 until count }
 
-  val colors = ChartColors(parse(props.textColor), parse(props.mutedColor), parse(props.gridColor), parse(props.accentColor))
+  val colors = ChartColors(parse(props.textColor), parse(props.mutedColor), parse(props.gridColor), parse(props.incomeColor), parse(props.accentColor))
   val style = ChartText(measurer, fonts.first, fonts.second)
 
   Canvas(
@@ -119,7 +121,7 @@ fun FunctionalComposableScope.FlowChartContent(props: FlowChartProps) {
   }
 }
 
-private data class ChartColors(val text: Color, val muted: Color, val grid: Color, val accent: Color)
+private data class ChartColors(val text: Color, val muted: Color, val grid: Color, val income: Color, val accent: Color)
 private data class ChartText(val measurer: TextMeasurer, val medium: FontFamily, val bold: FontFamily)
 
 private fun slotCenter(width: Float, count: Int, i: Int) = (i + 0.5f) * (width / count)
@@ -167,15 +169,15 @@ private fun DrawScope.drawLine(
       lineTo(slotCenter(size.width, count, 0), bottom)
       close()
     }
-    drawPath(area, Brush.verticalGradient(listOf(colors.text.copy(alpha = 0.14f), Color.Transparent), startY = top, endY = bottom))
-    drawPath(line, colors.text, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-    drawCircle(colors.text, radius = 3.5.dp.toPx(), center = Offset(lastX, y(props.current.last())))
+    drawPath(area, Brush.verticalGradient(listOf(colors.accent.copy(alpha = 0.14f), Color.Transparent), startY = top, endY = bottom))
+    drawPath(line, colors.accent, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawCircle(colors.accent, radius = 3.5.dp.toPx(), center = Offset(lastX, y(props.current.last())))
   }
 
   selected?.let { i ->
     val x = slotCenter(size.width, count, i)
     drawLine(colors.muted, Offset(x, top), Offset(x, bottom), strokeWidth = 1.dp.toPx())
-    props.current.getOrNull(i)?.let { drawCircle(colors.text, radius = 5.dp.toPx(), center = Offset(x, y(it))) }
+    props.current.getOrNull(i)?.let { drawCircle(colors.accent, radius = 5.dp.toPx(), center = Offset(x, y(it))) }
     props.previous.getOrNull(i)?.let { drawCircle(colors.muted, radius = 3.5.dp.toPx(), center = Offset(x, y(it))) }
   }
 }
@@ -207,7 +209,7 @@ private fun DrawScope.drawBars(
     props.current.getOrNull(i)?.takeIf { it > 0 }?.let { v ->
       val h = max(((v / outPeak).toFloat() * (baseline - top - 2.dp.toPx())), 2.dp.toPx())
       drawRoundRect(
-        if (focus) colors.text else colors.muted.copy(alpha = 0.45f),
+        if (focus) colors.accent else colors.accent.copy(alpha = 0.35f),
         topLeft = Offset(x, baseline - 1.dp.toPx() - h),
         size = Size(barWidth, h),
         cornerRadius = radius
@@ -216,7 +218,7 @@ private fun DrawScope.drawBars(
     props.income.getOrNull(i)?.takeIf { it > 0 }?.let { v ->
       val h = max(((v / inPeak).toFloat() * (bottom - baseline - 3.dp.toPx())), 2.dp.toPx())
       drawRoundRect(
-        if (focus) colors.accent else colors.accent.copy(alpha = 0.35f),
+        if (focus) colors.income else colors.income.copy(alpha = 0.35f),
         topLeft = Offset(x, baseline + 2.dp.toPx()),
         size = Size(barWidth, h),
         cornerRadius = radius
