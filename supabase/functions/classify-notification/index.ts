@@ -1,5 +1,5 @@
 // Classifies bank / e-wallet notifications that no on-device rule understood.
-// Signed-in users only (verify_jwt stays on, and withSupabase checks the JWT again).
+// Signed-in users only (verify_jwt stays on, and getUser checks the JWT again).
 // Results are suggestions: the app asks the user before anything reaches the ledger.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -114,8 +114,7 @@ async function countSince(
   return count ?? 0;
 }
 
-export default {
-  fetch: async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
     if (req.method !== 'POST') return Response.json({ error: 'method' }, { status: 405 });
     const apiKey = Deno.env.get('GEMINI_API_KEY');
     if (!apiKey) return Response.json({ error: 'not_configured' }, { status: 503 });
@@ -125,7 +124,7 @@ export default {
 
     // The client carries the caller's JWT, so RLS limits every query below to their own rows.
     const authorization = req.headers.get('Authorization') ?? '';
-    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, (Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY'))!, {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false },
     });
@@ -198,5 +197,4 @@ export default {
       }
     }
     return Response.json({ model: MODEL, results });
-  },
-};
+});
