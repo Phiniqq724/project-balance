@@ -45,6 +45,7 @@
   "scripts": {
     "start": "APP_VARIANT=development expo start",
     "android": "APP_VARIANT=development expo run:android",
+    "prebuild": "APP_VARIANT=development expo prebuild --clean -p android && echo \"sdk.dir=$HOME/Library/Android/sdk\" > android/local.properties",
     "lint": "expo lint"
   },
   "private": true,
