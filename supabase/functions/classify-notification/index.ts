@@ -10,10 +10,10 @@ import { MAX_TEXT, redact } from '../_shared/redact.ts';
 // available, per ai.google.dev/gemini-api/docs/pricing). gemini-2.5-flash-lite is cheaper but older. Override with the GEMINI_MODEL secret without redeploying code.
 const MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.1-flash-lite';
 // Free-tier models get overloaded ("high demand" 503s) or hang; the older Flash-Lite is the backup.
-const FALLBACK = Deno.env.get('GEMINI_FALLBACK_MODEL') ?? 'gemini-2.5-flash-lite';
+const FALLBACK = Deno.env.get('GEMINI_FALLBACK_MODEL') ?? 'gemini-3.5-flash-lite';
 const geminiUrl = (model: string) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-// Well under the edge function's wall-clock limit, so a hung call can't kill the worker.
-const TIMEOUT_MS = 25_000;
+// Free-tier latency swings (8-25s seen for one batch); two tries still fit the 150s worker limit.
+const TIMEOUT_MS = 45_000;
 
 const MAX_ITEMS = 10;
 const PER_HOUR = 30;
@@ -152,7 +152,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .order('created_at', { ascending: false })
       .limit(EXAMPLES);
 
-    const request = JSON.stringify({
+    const request = (thinkingLevel: string | null) => JSON.stringify({
         systemInstruction: { parts: [{ text: INSTRUCTIONS + examplesBlock((examples ?? []) as Example[]) }] },
         contents: [
           {
@@ -164,6 +164,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
           temperature: 0,
           responseMimeType: 'application/json',
           responseSchema: RESPONSE_SCHEMA,
+          // Gemini 3 thinks before answering; a classification doesn't need it and it costs seconds.
+          ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
         },
       });
     let gemini: Response | null = null;
@@ -174,7 +176,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         gemini = await fetch(geminiUrl(candidate), {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-          body: request,
+          body: request(candidate === MODEL ? 'minimal' : null),
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
       } catch (e) {
