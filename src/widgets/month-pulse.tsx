@@ -14,23 +14,23 @@ const MonthPulse = (props: MonthPulseProps) => {
   'widget';
   return (
     // A full-size button so a tap anywhere opens the app (the "open:" target comes from patches/expo-widgets).
-    <Button {...({ target: 'open:projectbalance://' } as object)} modifiers={[fillMaxSize(), background('#0B0D0E'), cornerRadius(20)]}>
+    <Button {...({ target: 'open:projectbalance://' } as object)} modifiers={[fillMaxSize(), background('#1A1614'), cornerRadius(20)]}>
       <Column modifiers={[fillMaxSize(), paddingAll(14)]}>
-        <Text color="#8F989E" style={{ fontSize: 12 }}>
+        <Text color="#AC9F92" style={{ fontSize: 12 }}>
           {props.month}
         </Text>
         <Spacer modifiers={[height(6)]} />
-        <Text color="#E6EAEC" style={{ fontSize: 28, fontWeight: '700' }}>
+        <Text color="#F3EBE2" style={{ fontSize: 28, fontWeight: '700' }}>
           {props.spent}
         </Text>
-        <Text color="#8F989E" style={{ fontSize: 12 }}>
+        <Text color="#AC9F92" style={{ fontSize: 12 }}>
           spent
         </Text>
         <Spacer modifiers={[height(10)]} />
-        <Text color="#39D353" style={{ fontSize: 13, fontWeight: '500' }}>
+        <Text color="#9BCB9F" style={{ fontSize: 13, fontWeight: '500' }}>
           {`+${props.received} in`}
         </Text>
-        <Text color="#8F989E" style={{ fontSize: 13 }}>
+        <Text color="#AC9F92" style={{ fontSize: 13 }}>
           {`${props.today} today`}
         </Text>
       </Column>

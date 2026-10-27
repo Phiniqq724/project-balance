@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.provider.Settings as AndroidSettings
 import expo.modules.kotlin.exception.Exceptions
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.ui.ExpoUIView
@@ -153,6 +154,25 @@ class BalanceCoreModule : Module() {
       Ledger.write(context) { db -> Ledger.reprocessAll(db) }
     }
 
+    // AI review (cloud mode). JS calls the edge function and hands results back here.
+    AsyncFunction("setAiReview") { on: Boolean ->
+      Ledger.write(context) { db -> Ledger.setAiEnabled(db, on) }
+    }
+
+    AsyncFunction("aiSuggest") { rawId: Long, kind: String, direction: String, amount: Long, counterparty: String?, confidence: Double ->
+      requireReview(kind, direction, amount)
+      Ledger.write(context) { db -> Ledger.suggest(db, rawId, kind, direction, amount, counterparty, confidence) }
+    }
+
+    AsyncFunction("aiFailed") { rawId: Long ->
+      Ledger.write(context) { db -> Ledger.reviewFailed(db, rawId) }
+    }
+
+    AsyncFunction("aiResolve") { rawId: Long, kind: String, direction: String, amount: Long, counterparty: String? ->
+      requireReview(kind, direction, amount)
+      Ledger.write(context) { db -> Ledger.resolve(db, rawId, kind, direction, amount, counterparty?.trim()?.takeIf { it.isNotEmpty() }) }
+    }
+
     // Supabase's session storage. Synchronous so the client can read it before the first render.
     Function("getAuthItem") { key: String -> Account.getAuthItem(context, key) }
     Function("setAuthItem") { key: String, value: String -> Account.setAuthItem(context, key, value) }
@@ -162,8 +182,29 @@ class BalanceCoreModule : Module() {
       Ledger.switchUser(context, userId)
     }
 
+    // Whose ledger is open: a user id, "local", or null before anything is chosen.
+    Function("activeUser") { Account.userId(context) }
+
+    AsyncFunction("mergeFromCloud") { userId: String, categories: List<CloudCategory>, transactions: List<CloudTransaction>, selfNames: String? ->
+      Ledger.write(context) { db ->
+        // Only into the ledger it was fetched for; the owner may have changed while the fetch ran.
+        if (Account.userId(context) != userId) false else LedgerMerge.mergeCloud(db, userId, categories, transactions, selfNames)
+      }
+    }
+
+    AsyncFunction("signInWithGoogle") Coroutine { serverClientId: String ->
+      val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+      GoogleSignIn.signIn(activity, serverClientId)
+    }
+
     AsyncFunction("refreshWidgets") {
       WidgetBridge.refresh(context)
     }
+  }
+
+  private fun requireReview(kind: String, direction: String, amount: Long) {
+    require(kind in setOf("income", "expense", "transfer", "ad_or_other")) { "Unknown kind $kind" }
+    require(direction == "in" || direction == "out") { "Unknown direction $direction" }
+    require(amount >= 0) { "Negative amount" }
   }
 }

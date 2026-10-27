@@ -35,8 +35,10 @@ import { useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 
 import type { InstalledApp } from '../../../modules/balance-core/src/BalanceCoreModule';
+import { AccountSwitch, LocalHeader } from '@/components/account-switch';
+import { AiReviewRow } from '@/components/ai-review-row';
 import { CategorySheet, fieldColors, fieldText } from '@/components/category-sheet';
-import { Chip, Failed, Label, Loading, Rule, Screen } from '@/components/kit';
+import { Chip, Failed, Label, LinkRow, Loading, Rule, Screen } from '@/components/kit';
 import {
   BalanceCore,
   getCategories,
@@ -47,8 +49,7 @@ import {
   sourceLabel,
   type Category,
 } from '@/lib/ledger';
-import { useUser } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { useCloudUser, useUser } from '@/lib/auth';
 import { changeAvatar, removeAvatar, saveUsername, useProfile } from '@/lib/profile';
 import { syncNow, useSyncStatus } from '@/lib/sync';
 import { useLedger } from '@/lib/use-ledger';
@@ -80,6 +81,7 @@ export default function ProfileScreen() {
 
 function ProfileBody({ data }: { data: Data }) {
   const [editing, setEditing] = useState<Category | 'new' | null>(null);
+  const signedIn = !!useCloudUser();
 
   return (
     <>
@@ -88,7 +90,7 @@ function ProfileBody({ data }: { data: Data }) {
           Profile
         </Label>
 
-        <Account />
+        {signedIn ? <Account /> : <LocalHeader />}
         <Spacer modifiers={[height(28)]} />
 
         <Access on={data.hasAccess} />
@@ -115,7 +117,13 @@ function ProfileBody({ data }: { data: Data }) {
         <Rule />
         <Reprocess />
         <Rule />
-        <SignOut />
+        {signedIn && (
+          <>
+            <AiReviewRow />
+            <Rule />
+          </>
+        )}
+        <AccountSwitch cloud={signedIn} />
         <Rule />
         <Spacer modifiers={[height(space.navClearance)]} />
       </Column>
@@ -378,21 +386,6 @@ function SelfNames({ initial }: { initial: string[] }) {
   );
 }
 
-function LinkRow({ label, value, onPress }: { label: string; value?: string; onPress: () => void }) {
-  return (
-    <Row verticalAlignment="center" modifiers={[fillMaxWidth(), clickable(onPress), padding(space.page, 18, space.page, 18)]}>
-      <Label weight="medium" modifiers={[weight(1)]}>
-        {label}
-      </Label>
-      {value && (
-        <Label weight="medium" tone="muted">
-          {value}
-        </Label>
-      )}
-    </Row>
-  );
-}
-
 function Reprocess() {
   const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
   const run = async () => {
@@ -545,20 +538,4 @@ function ProfileSheet({ email, onClose }: { email: string; onClose: () => void }
       </Column>
     </ModalBottomSheet>
   );
-}
-
-function SignOut() {
-  const [status, setStatus] = useState<'idle' | 'running' | 'failed'>('idle');
-  const user = useUser();
-  const run = async () => {
-    if (status === 'running') return;
-    setStatus('running');
-    // Last push first, so nothing logged since the last sync is missing from the cloud.
-    await syncNow(user.id);
-    // Local scope: other phones on this account stay signed in.
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-    if (error) setStatus('failed');
-  };
-  const value = { idle: undefined, running: 'Signing out…', failed: 'Failed' }[status];
-  return <LinkRow label="Sign out" value={value} onPress={run} />;
 }

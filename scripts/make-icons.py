@@ -5,8 +5,8 @@ from PIL import Image, ImageDraw
 
 out = sys.argv[1]
 variant = sys.argv[2] if len(sys.argv) > 2 else 'flat'
-BG = (0x0B, 0x0D, 0x0E, 255)
-HEAT = ['#1A1F23', '#0E4429', '#006D32', '#26A641', '#39D353']
+BG = (0x1A, 0x16, 0x14, 255)
+HEAT = ['#2B2420', '#5C2D1C', '#93401F', '#D2582B', '#FF7444']
 # A "B" drawn in heat squares, 4 wide x 5 tall. Empty cells keep the no-spend shade so it still reads as the grid.
 B = ['###.',
      '#..#',

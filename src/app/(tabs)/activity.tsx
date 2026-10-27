@@ -101,7 +101,7 @@ export default function ActivityScreen() {
           </Row>
           <Row horizontalArrangement={{ spacedBy: 16 }}>
             <Label size={14} weight="medium">{`−${digits(out)}`}</Label>
-            <Label size={14} weight="medium" tone="accent">{`+${digits(income)}`}</Label>
+            <Label size={14} weight="medium" tone="income">{`+${digits(income)}`}</Label>
           </Row>
         </Column>
 
@@ -162,7 +162,7 @@ function DayHeader({ day, max }: { day: DayItem; max: number }) {
           {day.label}
         </Label>
         {day.received > 0 && (
-          <Label size={13} weight="medium" tone="accent">
+          <Label size={13} weight="medium" tone="income">
             {`+${digits(day.received)}`}
           </Label>
         )}

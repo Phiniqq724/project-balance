@@ -90,7 +90,7 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
             modifiers={[fillMaxWidth(), height(224), padding(space.page, 24, space.page, 0)]}
           />
           <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label={meta.current} />
+            <LegendKey label={meta.current} tint={color.accent} />
             {a.hasPrevious && <LegendKey label={meta.previous} dashed />}
           </Row>
 
@@ -114,11 +114,12 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
             mutedColor={color.muted}
             gridColor={color.line}
             accentColor={color.accent}
+            incomeColor={color.income}
             modifiers={[fillMaxWidth(), height(184), padding(space.page, 0, space.page, 0)]}
           />
           <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label="Spent" />
-            <LegendKey label="Received" tint={color.accent} />
+            <LegendKey label="Spent" tint={color.accent} />
+            <LegendKey label="Received" tint={color.income} />
           </Row>
 
           <StatPlate a={a} />
@@ -274,13 +275,13 @@ function FlowSplit({ spent, received }: { spent: number; received: number }) {
     <>
       <SectionHead title="In and out" />
       <Row modifiers={[fillMaxWidth(), padding(space.page, 0, space.page, 0)]}>
-        <Figure label="In" value={`+${digits(received)}`} tone="accent" />
+        <Figure label="In" value={`+${digits(received)}`} tone="income" />
         <Figure label="Out" value={`−${digits(spent)}`} />
         <Figure label="Net" value={`${net >= 0 ? '+' : '−'}${digits(net)}`} />
       </Row>
       {spent + received > 0 && (
         <Row horizontalArrangement={{ spacedBy: 2 }} modifiers={[fillMaxWidth(), padding(space.page, 0, space.page, 0), height(6)]}>
-          {received > 0 && <Box modifiers={[weight(received), height(6), clip(Shapes.RoundedCorner(2)), background(color.accent)]} />}
+          {received > 0 && <Box modifiers={[weight(received), height(6), clip(Shapes.RoundedCorner(2)), background(color.income)]} />}
           {spent > 0 && <Box modifiers={[weight(spent), height(6), clip(Shapes.RoundedCorner(2)), background(color.text)]} />}
         </Row>
       )}
@@ -288,7 +289,7 @@ function FlowSplit({ spent, received }: { spent: number; received: number }) {
   );
 }
 
-function Figure({ label, value, tone = 'text' }: { label: string; value: string; tone?: 'text' | 'accent' }) {
+function Figure({ label, value, tone = 'text' }: { label: string; value: string; tone?: 'text' | 'income' }) {
   return (
     <Column modifiers={[weight(1), padding(0, 0, 0, 14)]} verticalArrangement={{ spacedBy: 2 }}>
       <Label size={12} weight="medium" tone="muted">
@@ -340,7 +341,7 @@ function WhereItCameFrom({ sources }: { sources: Share[] }) {
     <>
       <SectionHead title="Where it came from" />
       {sources.slice(0, 5).map((s, i) => (
-        <ShareRow key={s.key} rank={i + 1} swatch={color.accent} share={s} income />
+        <ShareRow key={s.key} rank={i + 1} swatch={color.income} share={s} income />
       ))}
     </>
   );
@@ -364,7 +365,7 @@ function ShareRow({ rank, swatch, share, income, onPress }: { rank: number; swat
           {`${Math.round(share.share * 100)}%  ·  ${share.count}×`}
         </Label>
       </Column>
-      <Label weight="medium" tone={income ? 'accent' : 'text'}>
+      <Label weight="medium" tone={income ? 'income' : 'text'}>
         {`${income ? '+' : ''}${digits(share.amount)}`}
       </Label>
     </Row>

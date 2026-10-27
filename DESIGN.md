@@ -2,11 +2,11 @@
 
 Set by the owner on 2026-10-26.
 
-- **Mood:** Instrument. Cool graphite, like a precise gauge. Numbers do the talking.
+- **Mood:** Ember. Warm charcoal, like a banked fire. Numbers do the talking.
 - **Theme:** dark only.
 - **Type:** Satoshi (Fontshare), Regular / Medium / Bold.
 - **Copy:** English, short. No long descriptions anywhere.
-- **Spending grid:** GitHub-style green. Darker green = more spent that day.
+- **Spending grid:** Ember orange. Brighter = more spent that day.
 - **Platform:** Android only, Jetpack Compose (`@expo/ui/jetpack-compose`) for all UI.
 
 Dial: ENERGY 1 / RHYTHM 2 / MOTION 1
@@ -15,18 +15,19 @@ Dial: ENERGY 1 / RHYTHM 2 / MOTION 1
 
 | Token | Value | Use |
 |---|---|---|
-| bg | `#0B0D0E` | every screen |
-| surface | `#131618` | sheets, nav bar |
-| raised | `#1B1F22` | banners |
-| line | `#23282C` | hairline rules, bar tracks |
-| text | `#E6EAEC` | primary text, the lead bar, selected states |
-| muted | `#8F989E` | secondary text, "Rp" prefix |
-| accent | `#39D353` | money in, the spending grid. Nowhere else. |
-| danger | `#F2867A` | errors, "access off" |
+| bg | `#1A1614` | every screen |
+| surface | `#221D1A` | sheets, nav bar |
+| raised | `#2B2521` | banners |
+| line | `#3A322C` | hairline rules, bar tracks |
+| text | `#F3EBE2` | primary text, the lead bar, selected states |
+| muted | `#AC9F92` | secondary text, "Rp" prefix |
+| accent | `#FF7444` | the spending heat grid. Nowhere else. |
+| income | `#9BCB9F` | money in: sage text, split bar, received series |
+| danger | `#F07AAE` | errors, "access off" |
 
 ## Why
 
 - Hairline rules instead of cards: an instrument reads as one panel, not a stack of tiles.
 - Big Satoshi Bold totals with a small muted "Rp": the digits are the focal point on every screen.
-- Green only for growth (money in) and heat (spending grid), so it always means something.
+- Orange only for spending heat, sage only for money in, pink only for errors, so each color always means something.
 - Money out has no color, just a minus sign. Spending isn't an error.

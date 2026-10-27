@@ -40,7 +40,8 @@ internal object Parsers {
   private val outWords = Regex("""\b(paid|spent|transferred|payment|pembayaran|bayar|transfer ke|debit|keluar)\b""", RegexOption.IGNORE_CASE)
   private val inWords = Regex("""\b(received|sent .* to you|diterima|masuk|menerima|kredit|credit)\b""", RegexOption.IGNORE_CASE)
 
-  fun parse(pkg: String, title: String?, body: String): ParseResult {
+  /** [generic] off = only the bank-specific rules; anything else is left for AI review. */
+  fun parse(pkg: String, title: String?, body: String, generic: Boolean = true): ParseResult {
     val text = normalize(body)
 
     val specific = when (pkg) {
@@ -52,6 +53,7 @@ internal object Parsers {
 
     if (!anyAmount.containsMatchIn(text)) return ParseResult.Ignored
     if (promo.containsMatchIn(text)) return ParseResult.Ignored
+    if (!generic) return ParseResult.Unparsed
     return parseGeneric(text)?.let { ParseResult.Transaction(it) } ?: ParseResult.Unparsed
   }
 
@@ -123,6 +125,38 @@ internal object Parsers {
   private fun cleanName(raw: String): String = raw.trim().trimEnd('.').trim()
 
   private fun String.isTransferCategory() = contains("transfer", ignoreCase = true)
+}
+
+/**
+ * Cheap on-device check for what is worth sending to AI review: an amount (Rp / IDR / rupiah,
+ * or Indonesian shorthand like "25rb", "1,5jt") and no sign of an OTP. Promo-sounding text only
+ * passes when it also has a transaction word, since e-wallets mention cashback on real payments.
+ */
+internal object Prefilter {
+  private val amount = Regex(
+    """(?:\b(?:Rp|IDR)\.?\s?\d)|(?:\d[\d.,]*\s?(?:rb|ribu|jt|juta|rupiah)\b)""",
+    RegexOption.IGNORE_CASE
+  )
+  private val otp = Regex(
+    """\b(OTP|kode verifikasi|kode rahasia|verification code|one[- ]time (?:password|code)|PIN)\b""",
+    RegexOption.IGNORE_CASE
+  )
+  private val txWords = Regex(
+    """\b(paid|pay|payment|spent|purchase|transfer(?:red)?|received|sent|top[- ]?up|withdraw(?:al|n)?|refund(?:ed)?|debit(?:ed)?|credit(?:ed)?|""" +
+      """bayar|dibayar|pembayaran|transaksi|terima|diterima|menerima|masuk|keluar|kirim|dikirim|mengirim|tarik|penarikan|belanja|isi saldo|berhasil|sukses|successful)\b""",
+    RegexOption.IGNORE_CASE
+  )
+  private val promo = Regex(
+    """\b(promo|voucher|diskon|discount|menangkan|hadiah|giveaway|gratis|free|flash sale|hemat|kupon|coupon)\b""",
+    RegexOption.IGNORE_CASE
+  )
+
+  fun isCandidate(title: String?, body: String): Boolean {
+    val text = Parsers.normalize(listOfNotNull(title, body).joinToString(" "))
+    if (!amount.containsMatchIn(text)) return false
+    if (otp.containsMatchIn(text)) return false
+    return txWords.containsMatchIn(text) || !promo.containsMatchIn(text)
+  }
 }
 
 /**
