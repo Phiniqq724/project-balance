@@ -86,10 +86,11 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
             textColor={color.text}
             mutedColor={color.muted}
             gridColor={color.line}
+            accentColor={color.accent}
             modifiers={[fillMaxWidth(), height(224), padding(space.page, 24, space.page, 0)]}
           />
           <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label={meta.current} />
+            <LegendKey label={meta.current} tint={color.accent} />
             {a.hasPrevious && <LegendKey label={meta.previous} dashed />}
           </Row>
 
@@ -112,11 +113,12 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
             textColor={color.text}
             mutedColor={color.muted}
             gridColor={color.line}
+            accentColor={color.accent}
             incomeColor={color.income}
             modifiers={[fillMaxWidth(), height(184), padding(space.page, 0, space.page, 0)]}
           />
           <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label="Spent" />
+            <LegendKey label="Spent" tint={color.accent} />
             <LegendKey label="Received" tint={color.income} />
           </Row>
 

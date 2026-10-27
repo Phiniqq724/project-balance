@@ -17,6 +17,8 @@ export type FlowChartProps = {
   mutedColor?: string;
   gridColor?: string;
   incomeColor?: string;
+  /** The current period: line, dots and spend bars. */
+  accentColor?: string;
   modifiers?: ModifierConfig[];
 };
 
