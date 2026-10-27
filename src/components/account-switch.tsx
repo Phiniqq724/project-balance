@@ -1,9 +1,11 @@
+import Cloud from '@expo/material-symbols/cloud.xml';
+import Mobile from '@expo/material-symbols/mobile.xml';
 import { Column } from '@expo/ui/jetpack-compose';
 import { fillMaxWidth, padding } from '@expo/ui/jetpack-compose/modifiers';
 import { useState } from 'react';
 import { Alert } from 'react-native';
 
-import { Label, LinkRow } from '@/components/kit';
+import { Label, SettingsRow } from '@/components/kit';
 import { switchToLocal } from '@/lib/auth';
 import { signInWithGoogle } from '@/lib/google';
 import { space } from '@/theme';
@@ -55,10 +57,17 @@ export function AccountSwitch({ cloud }: { cloud: boolean }) {
       { text: 'Stop syncing', onPress: () => void disconnect() },
     ]);
 
-  const value = state === 'running' ? 'Working…' : state === 'failed' ? (message ?? 'Failed') : undefined;
+  const status = state === 'running' ? 'Working…' : state === 'failed' ? (message ?? 'Failed') : undefined;
   return cloud ? (
-    <LinkRow label="Use this phone only" value={value} onPress={confirm} />
+    <SettingsRow icon={Mobile} title="Use this phone only" tone="danger" status={status} statusTone="danger" onPress={confirm} />
   ) : (
-    <LinkRow label="Connect Google" value={value} onPress={connect} />
+    <SettingsRow
+      icon={Cloud}
+      title="Connect Google"
+      subtitle="Back up and sync"
+      status={status}
+      statusTone={state === 'failed' ? 'danger' : 'muted'}
+      onPress={connect}
+    />
   );
 }

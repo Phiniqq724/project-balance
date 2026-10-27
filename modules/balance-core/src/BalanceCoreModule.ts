@@ -52,8 +52,7 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   mergeFromCloud(
     userId: string,
     categories: CloudCategoryRow[],
-    transactions: CloudTransactionRow[],
-    selfNames: string | null
+    transactions: CloudTransactionRow[]
   ): Promise<boolean>;
   /** Writes the active ledger as .xlsx to the document at this content:// uri. */
   exportLedger(uri: string): Promise<{ transactions: number; categories: number }>;

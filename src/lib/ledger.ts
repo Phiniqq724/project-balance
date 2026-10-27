@@ -49,7 +49,6 @@ export type Review = {
 
 export const SETTINGS = {
   watchedPackages: 'watched_packages',
-  selfNames: 'self_names',
   aiReview: 'ai_review',
 } as const;
 

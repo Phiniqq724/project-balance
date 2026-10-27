@@ -1,3 +1,4 @@
+import ChevronRight from '@expo/material-symbols/chevron_right.xml';
 import {
   Box,
   Button,
@@ -5,6 +6,7 @@ import {
   Column,
   HorizontalDivider,
   Host,
+  Icon,
   Row,
   Text,
   type TextProps,
@@ -13,6 +15,7 @@ import {
   background,
   clickable,
   clip,
+  defaultMinSize,
   fillMaxSize,
   fillMaxWidth,
   padding,
@@ -21,6 +24,7 @@ import {
   Shapes,
 } from '@expo/ui/jetpack-compose/modifiers';
 import type { ReactNode } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { color, font, materialOverrides, space } from '@/theme';
@@ -119,17 +123,65 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
   );
 }
 
-export function LinkRow({ label, value, onPress }: { label: string; value?: string; onPress: () => void }) {
+type RowTone = 'text' | 'danger';
+
+/** Rounded card holding a short list of settings rows. */
+export function SettingsGroup({ children }: { children: ReactNode }) {
   return (
-    <Row verticalAlignment="center" modifiers={[fillMaxWidth(), clickable(onPress), padding(space.page, 18, space.page, 18)]}>
-      <Label weight="medium" modifiers={[weight(1)]}>
-        {label}
-      </Label>
-      {value && (
-        <Label weight="medium" tone="muted">
-          {value}
+    <Column modifiers={[fillMaxWidth(), padding(space.page, 0, space.page, 0), clip(Shapes.RoundedCorner(16)), background(color.surface)]}>
+      {children}
+    </Column>
+  );
+}
+
+/** Hairline between rows, inset to line up with the titles (16 padding + 22 icon + 14 gap). */
+export function SettingsDivider() {
+  return (
+    <Box modifiers={[fillMaxWidth(), padding(52, 0, 0, 0)]}>
+      <Rule />
+    </Box>
+  );
+}
+
+type SettingsRowProps = {
+  title: string;
+  onPress: () => void;
+  icon?: ImageSourcePropType;
+  subtitle?: string;
+  tone?: RowTone;
+  /** Text at the end, for progress or a result. Replaces the chevron. */
+  status?: string;
+  statusTone?: 'muted' | 'danger';
+  /** A control at the end, such as a Switch. Replaces the chevron. */
+  trailing?: ReactNode;
+};
+
+/** The whole row presses. The end shows what it does: a chevron, a status, or a control. */
+export function SettingsRow({ title, onPress, icon, subtitle, tone = 'text', status, statusTone = 'muted', trailing }: SettingsRowProps) {
+  return (
+    <Row
+      verticalAlignment="center"
+      horizontalArrangement={{ spacedBy: 14 }}
+      modifiers={[fillMaxWidth(), defaultMinSize({ minHeight: 56 }), clickable(onPress), padding(16, 10, 16, 10)]}>
+      {icon && <Icon source={icon} size={22} tint={tone === 'danger' ? color.danger : color.muted} />}
+      <Column modifiers={[weight(1)]}>
+        <Label weight="medium" tone={tone}>
+          {title}
         </Label>
-      )}
+        {subtitle && (
+          <Label size={13} tone="muted">
+            {subtitle}
+          </Label>
+        )}
+      </Column>
+      {trailing ??
+        (status ? (
+          <Label size={14} weight="medium" tone={statusTone}>
+            {status}
+          </Label>
+        ) : (
+          <Icon source={ChevronRight} size={22} tint={color.muted} />
+        ))}
     </Row>
   );
 }

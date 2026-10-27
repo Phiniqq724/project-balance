@@ -1,14 +1,14 @@
-import { Row } from '@expo/ui/jetpack-compose';
-import { clickable, fillMaxWidth, padding, weight } from '@expo/ui/jetpack-compose/modifiers';
+import StarShine from '@expo/material-symbols/star_shine.xml';
+import { Switch } from '@expo/ui/jetpack-compose';
 import { useState } from 'react';
 
-import { Label } from '@/components/kit';
+import { SettingsDivider, SettingsRow } from '@/components/kit';
 import { setAiReviewEnabled } from '@/lib/ai-review';
 import { BalanceCore, SETTINGS } from '@/lib/ledger';
 import { useLedger } from '@/lib/use-ledger';
-import { space } from '@/theme';
+import { color } from '@/theme';
 
-/** Profile row: send money-looking notifications from your picked apps to AI for you to confirm. Signed-in only. */
+/** Profile row, with its divider below: send money-looking notifications from your picked apps to AI for you to confirm. Signed-in only. */
 export function AiReviewRow() {
   const state = useLedger(() => BalanceCore.getSetting(SETTINGS.aiReview));
   const [busy, setBusy] = useState(false);
@@ -29,13 +29,15 @@ export function AiReviewRow() {
   };
 
   return (
-    <Row verticalAlignment="center" modifiers={[fillMaxWidth(), clickable(toggle), padding(space.page, 18, space.page, 18)]}>
-      <Label weight="medium" modifiers={[weight(1)]}>
-        AI review
-      </Label>
-      <Label weight="medium" tone={failed ? 'danger' : 'muted'}>
-        {failed ? 'Failed' : busy ? '…' : on ? 'On' : 'Off'}
-      </Label>
-    </Row>
+    <>
+      <SettingsRow
+        icon={StarShine}
+        title="AI review"
+        subtitle={failed ? "Couldn't change it" : 'Ask AI about unclear notifications'}
+        onPress={toggle}
+        trailing={<Switch value={on} enabled={!busy} colors={{ checkedTrackColor: color.text, checkedThumbColor: color.bg }} />}
+      />
+      <SettingsDivider />
+    </>
   );
 }

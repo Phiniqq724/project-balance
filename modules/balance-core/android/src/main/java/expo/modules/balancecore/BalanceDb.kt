@@ -147,8 +147,6 @@ internal class BalanceDb private constructor(context: Context, val name: String)
 
   fun aiEnabled(): Boolean = getSetting(Settings.AI_REVIEW) == "1"
 
-  fun selfNames(): List<String> = Settings.splitList(getSetting(Settings.SELF_NAMES), '\n')
-
   fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> {
     val bound = args.map(::bindable).toTypedArray()
     return readableDatabase.rawQuery(sql, bound).use { cursor ->
@@ -228,7 +226,6 @@ internal class BalanceDb private constructor(context: Context, val name: String)
 
 internal object Settings {
   const val WATCHED_PACKAGES = "watched_packages"
-  const val SELF_NAMES = "self_names"
   // "1" = send money-looking notifications no rule understood to the classify-notification function.
   const val AI_REVIEW = "ai_review"
 
