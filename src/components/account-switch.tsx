@@ -1,12 +1,13 @@
 import Cloud from '@expo/material-symbols/cloud.xml';
+import Logout from '@expo/material-symbols/logout.xml';
 import Mobile from '@expo/material-symbols/mobile.xml';
 import { Column } from '@expo/ui/jetpack-compose';
 import { fillMaxWidth, padding } from '@expo/ui/jetpack-compose/modifiers';
 import { useState } from 'react';
 import { Alert } from 'react-native';
 
-import { Label, SettingsRow } from '@/components/kit';
-import { switchToLocal } from '@/lib/auth';
+import { Label, SettingsDivider, SettingsRow } from '@/components/kit';
+import { signOut, switchToLocal } from '@/lib/auth';
 import { signInWithGoogle } from '@/lib/google';
 import { space } from '@/theme';
 
@@ -40,11 +41,11 @@ export function AccountSwitch({ cloud }: { cloud: boolean }) {
     setState(error ? 'failed' : 'idle');
   };
 
-  const disconnect = async () => {
+  const leave = async (task: () => Promise<void>) => {
     if (state === 'running') return;
     setState('running');
     try {
-      await switchToLocal();
+      await task();
       setState('idle');
     } catch {
       setState('failed');
@@ -54,12 +55,22 @@ export function AccountSwitch({ cloud }: { cloud: boolean }) {
   const confirm = () =>
     Alert.alert('Use this phone only?', 'Backup and AI review stop. Your data stays here and in the cloud.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Stop syncing', onPress: () => void disconnect() },
+      { text: 'Stop syncing', onPress: () => void leave(switchToLocal) },
+    ]);
+
+  const confirmSignOut = () =>
+    Alert.alert('Sign out?', 'Your data stays backed up. Sign in again to get it back.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: () => void leave(signOut) },
     ]);
 
   const status = state === 'running' ? 'Working…' : state === 'failed' ? (message ?? 'Failed') : undefined;
   return cloud ? (
-    <SettingsRow icon={Mobile} title="Use this phone only" tone="danger" status={status} statusTone="danger" onPress={confirm} />
+    <>
+      <SettingsRow icon={Mobile} title="Use this phone only" status={status} statusTone="danger" onPress={confirm} />
+      <SettingsDivider />
+      <SettingsRow icon={Logout} title="Sign out" tone="danger" onPress={confirmSignOut} />
+    </>
   ) : (
     <SettingsRow
       icon={Cloud}

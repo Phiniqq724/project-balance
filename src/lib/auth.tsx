@@ -62,6 +62,14 @@ export async function switchToLocal(): Promise<void> {
   await apply(null);
 }
 
+/** Back to the sign-in screen. The account's ledger stays on the phone for the next sign-in. */
+export async function signOut(): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  if (data.session) await syncNow(data.session.user.id);
+  await supabase.auth.signOut({ scope: 'local' });
+  await apply(null);
+}
+
 // ---- Provider ----------------------------------------------------------------------------------
 
 /** undefined while the stored session is still being read. */
