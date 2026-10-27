@@ -17,6 +17,7 @@ import kotlin.math.abs
 import kotlin.math.roundToLong
 
 internal class NotLedgerFileException(detail: String) : CodedException("ERR_NOT_LEDGER_FILE", detail, null)
+internal class LedgerFileException(detail: String) : CodedException("ERR_LEDGER_FILE", detail, null)
 
 /**
  * The ledger as an .xlsx workbook: a Transactions sheet and a Categories sheet.
@@ -32,8 +33,6 @@ internal object LedgerFile {
   private const val DAY_MS = 86_400_000.0
   private const val EPOCH_1900 = 25569.0 // 1970-01-01 as an Excel serial day.
   private const val EPOCH_1904 = 24107.0
-  /** Status for imported notifications the parsers can't rebuild; re-reading leaves them alone. */
-  const val STATUS_IMPORTED = "imported"
 
   private object T {
     const val DATE = "Date"
@@ -394,17 +393,18 @@ internal object LedgerFile {
     val fresh = ArrayList<Pair<Row, Long?>>()
     var existing = 0
     for (row in parsed.rows) {
-      val print = "${row.pkg}\u0000${row.at}\u0000${row.body}"
-      if ((row.uid != null && !seenUids.add(row.uid)) || !seenPrints.add(print)) {
+      // Rows with no notification text are told apart by id alone.
+      val print = if (row.body.isBlank()) null else "${row.pkg}\u0000${row.at}\u0000${row.body}"
+      if ((row.uid != null && !seenUids.add(row.uid)) || (print != null && !seenPrints.add(print))) {
         existing++
         continue
       }
       val match = sqlite.rawQuery(
         """
         SELECT r.id, t.id FROM raw_notifications r LEFT JOIN transactions t ON t.raw_id = r.id
-        WHERE r.uid = ? OR (r.package = ? AND r.posted_at = ? AND r.body = ?) LIMIT 1
+        WHERE r.uid = ? OR (? AND r.package = ? AND r.posted_at = ? AND r.body = ?) LIMIT 1
         """,
-        arrayOf(row.uid ?: "", row.pkg, row.at.toString(), row.body)
+        arrayOf(row.uid ?: "", if (print != null) "1" else "0", row.pkg, row.at.toString(), row.body)
       ).use { c -> if (c.moveToFirst()) c.getLong(0) to (if (c.isNull(1)) null else c.getLong(1)) else null }
       when {
         match == null -> fresh += row to null
@@ -474,7 +474,6 @@ internal object LedgerFile {
   fun apply(db: BalanceDb, parsed: Parsed): Imported {
     val plan = plan(db, parsed)
     val sqlite = db.writableDatabase
-    val watched = db.watchedPackages()
     sqlite.beginTransaction()
     try {
       val merge = CategoryMerge(sqlite)
@@ -483,20 +482,20 @@ internal object LedgerFile {
 
       val pairs = ArrayList<Pair<Long, String>>()
       for ((row, existingRawId) in plan.fresh) {
-        // Parsable notifications from watched apps behave like any other; the rest are kept as imported.
-        val parsable = row.pkg in watched && Parsers.parse(row.pkg, row.title, row.body) is ParseResult.Transaction
-        val status = if (parsable) "parsed" else STATUS_IMPORTED
-        val rawId = if (existingRawId != null) {
-          sqlite.execSQL("UPDATE raw_notifications SET status = ? WHERE id = ?", arrayOf<Any>(status, existingRawId))
-          existingRawId
-        } else {
-          sqlite.insertWithOnConflict("raw_notifications", null, ContentValues().apply {
+        // Like rows restored from the cloud: no notification to re-read, so re-parsing leaves them be.
+        val rawId = when {
+          existingRawId != null -> {
+            sqlite.execSQL("UPDATE raw_notifications SET status = ? WHERE id = ?", arrayOf<Any>(LedgerMerge.RESTORED, existingRawId))
+            existingRawId
+          }
+          row.body.isBlank() -> LedgerMerge.insertRestoredRaw(sqlite, row.uid ?: UUID.randomUUID().toString(), row.pkg, row.at) ?: -1L
+          else -> sqlite.insertWithOnConflict("raw_notifications", null, ContentValues().apply {
             put("uid", row.uid ?: UUID.randomUUID().toString())
             put("package", row.pkg)
             put("title", row.title)
             put("body", row.body)
             put("posted_at", row.at)
-            put("status", status)
+            put("status", LedgerMerge.RESTORED)
           }, SQLiteDatabase.CONFLICT_IGNORE)
         }
         if (rawId == -1L) continue
@@ -539,5 +538,5 @@ internal object LedgerFile {
   }
 
   fun open(context: Context, uri: Uri): InputStream =
-    context.contentResolver.openInputStream(uri) ?: throw NotLedgerFileException("Can't open file")
+    context.contentResolver.openInputStream(uri) ?: throw LedgerFileException("Can't open file")
 }

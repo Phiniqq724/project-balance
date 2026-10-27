@@ -229,10 +229,10 @@ internal object Ledger {
     )
   }
 
-  private class CategoryRule(val id: String, val keywords: List<Regex>)
+  internal class CategoryRule(val id: String, val keywords: List<Regex>)
 
   // Keywords match whole words, so "fee" hits "Admin Fee" but not "coffee".
-  private fun loadRules(db: BalanceDb): List<CategoryRule> =
+  internal fun loadRules(db: BalanceDb): List<CategoryRule> =
     db.readableDatabase.rawQuery("SELECT id, keywords FROM categories ORDER BY position", null).use { c ->
       buildList {
         while (c.moveToNext()) {
@@ -244,7 +244,7 @@ internal object Ledger {
       }
     }
 
-  private fun categorize(rules: List<CategoryRule>, counterparty: String?, bankCategory: String?): String? {
+  internal fun categorize(rules: List<CategoryRule>, counterparty: String?, bankCategory: String?): String? {
     val haystack = listOfNotNull(counterparty, bankCategory).joinToString(" ").lowercase()
     if (haystack.isBlank()) return null
     return rules.firstOrNull { rule -> rule.keywords.any { it.containsMatchIn(haystack) } }?.id

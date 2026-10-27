@@ -308,7 +308,7 @@ internal object Xlsx {
         XmlPullParser.START_TAG -> when (parser.localName()) {
           "row" -> {
             val index = parser.attr("r")?.toIntOrNull()?.minus(1) ?: rows.size
-            while (rows.size < index) rows += mutableListOf()
+            while (rows.size < index) rows.add(mutableListOf())
             row = mutableListOf()
             col = 0
           }
@@ -342,7 +342,7 @@ internal object Xlsx {
             col++
           }
           "row" -> {
-            row?.let { rows += it }
+            row?.let { rows.add(it) }
             row = null
           }
         }

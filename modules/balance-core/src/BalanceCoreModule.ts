@@ -55,9 +55,24 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
     transactions: CloudTransactionRow[],
     selfNames: string | null
   ): Promise<boolean>;
+  /** Writes the active ledger as .xlsx to the document at this content:// uri. */
+  exportLedger(uri: string): Promise<{ transactions: number; categories: number }>;
+  /** Reads an .xlsx and reports what importing would do. Rejects with ERR_NOT_LEDGER_FILE for other files. */
+  previewLedgerImport(uri: string): Promise<LedgerImportPreview>;
+  /** Merges the .xlsx into the active ledger. Rows already there are skipped, so it can be repeated safely. */
+  importLedger(uri: string): Promise<{ added: number; existing: number; newCategories: number }>;
   /** Credential Manager "Sign in with Google". Rejects with code ERR_CANCELLED, ERR_NO_ACCOUNT or ERR_GOOGLE_SIGN_IN. */
   signInWithGoogle(serverClientId: string): Promise<{ idToken: string; nonce: string }>;
 }
+
+export type LedgerImportPreview = {
+  add: number;
+  existing: number;
+  skipped: number;
+  newCategories: number;
+  from: number | null;
+  to: number | null;
+};
 
 export const LOCAL_OWNER = 'local';
 

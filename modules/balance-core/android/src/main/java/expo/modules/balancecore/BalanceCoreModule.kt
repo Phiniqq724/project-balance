@@ -197,9 +197,39 @@ class BalanceCoreModule : Module() {
       GoogleSignIn.signIn(activity, serverClientId)
     }
 
+    // Writes the active ledger as .xlsx to a document the user picked (a content:// uri).
+    AsyncFunction("exportLedger") { uri: String ->
+      val db = BalanceDb.get(context)
+      val out = context.contentResolver.openOutputStream(Uri.parse(uri), "wt") ?: throw LedgerFileException("Can't write file")
+      val done = out.use { LedgerFile.export(context, db, emptyMap(), it) }
+      mapOf("transactions" to done.transactions, "categories" to done.categories)
+    }
+
+    // What importing would do, without touching the ledger.
+    AsyncFunction("previewLedgerImport") { uri: String ->
+      val db = BalanceDb.get(context)
+      val parsed = LedgerFile.open(context, Uri.parse(uri)).use { LedgerFile.read(it, importLabels(db)) }
+      LedgerFile.plan(db, parsed).summary()
+    }
+
+    AsyncFunction("importLedger") { uri: String ->
+      val parsed = LedgerFile.open(context, Uri.parse(uri)).use { LedgerFile.read(it, importLabels(BalanceDb.get(context))) }
+      val done = Ledger.write(context) { db -> LedgerFile.apply(db, parsed) }
+      mapOf("added" to done.added, "existing" to done.existing, "newCategories" to done.newCategories)
+    }
+
     AsyncFunction("refreshWidgets") {
       WidgetBridge.refresh(context)
     }
+  }
+
+  /** App label -> package, so a hand-made sheet can name its Source by app name. */
+  private fun importLabels(db: BalanceDb): Map<String, String> = db.watchedPackages().associateWith { pkg ->
+    runCatching {
+      val pm = context.packageManager
+      @Suppress("DEPRECATION")
+      pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+    }.getOrDefault(pkg)
   }
 
   private fun requireReview(kind: String, direction: String, amount: Long) {

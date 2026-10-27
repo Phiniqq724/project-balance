@@ -189,7 +189,7 @@ internal object LedgerMerge {
     }
   }
 
-  private fun insertRestoredRaw(sqlite: SQLiteDatabase, uid: String, source: String, at: Long): Long? {
+  fun insertRestoredRaw(sqlite: SQLiteDatabase, uid: String, source: String, at: Long): Long? {
     // (package, posted_at, body) is unique and restored rows have no body, so two transactions from one
     // app in the same millisecond nudge the hidden posted_at apart. occurred_at keeps the real time.
     for (offset in 0 until 1000) {
