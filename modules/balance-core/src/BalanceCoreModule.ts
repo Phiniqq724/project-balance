@@ -9,7 +9,7 @@ export type Row = Record<string, SqlValue>;
 
 export type AiKind = 'income' | 'expense' | 'transfer' | 'ad_or_other';
 
-export type InstalledApp ={ package: string; label: string; icon: string | null };
+export type InstalledApp = { package: string; label: string; icon: string | null };
 
 declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   hasNotificationAccess(): boolean;

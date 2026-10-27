@@ -2,12 +2,12 @@
 // Signed-in users only (verify_jwt stays on, and withSupabase checks the JWT again).
 // Results are suggestions: the app asks the user before anything reaches the ledger.
 
-import { withSupabase } from 'npm:@supabase/server@1';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 import { MAX_TEXT, redact } from '../_shared/redact.ts';
 
-// Cheapest Flash-Lite generally available (Oct 2026): $0.25 / $1.50 per 1M tokens paid, free tier
-// available. Override with the GEMINI_MODEL secret without redeploying code.
+// Newest stable Flash-Lite that is cheaper than 3.5 ($0.25 / $1.50 per 1M tokens paid; free tier
+// available, per ai.google.dev/gemini-api/docs/pricing). gemini-2.5-flash-lite is cheaper but older. Override with the GEMINI_MODEL secret without redeploying code.
 const MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.1-flash-lite';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
@@ -115,7 +115,7 @@ async function countSince(
 }
 
 export default {
-  fetch: withSupabase({ auth: 'user' }, async (req, ctx) => {
+  fetch: async (req: Request): Promise<Response> => {
     if (req.method !== 'POST') return Response.json({ error: 'method' }, { status: 405 });
     const apiKey = Deno.env.get('GEMINI_API_KEY');
     if (!apiKey) return Response.json({ error: 'not_configured' }, { status: 503 });
@@ -123,8 +123,14 @@ export default {
     const items = parseItems(await req.json().catch(() => null));
     if (!items) return Response.json({ error: 'bad_request' }, { status: 400 });
 
-    // ctx.supabase carries the caller's JWT, so RLS limits every query below to their own rows.
-    const db = ctx.supabase;
+    // The client carries the caller's JWT, so RLS limits every query below to their own rows.
+    const authorization = req.headers.get('Authorization') ?? '';
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authorization } },
+      auth: { persistSession: false },
+    });
+    const { data: who, error: authError } = await db.auth.getUser(authorization.replace(/^Bearer /i, ''));
+    if (authError || !who.user) return Response.json({ error: 'unauthorized' }, { status: 401 });
     try {
       const [hour, day] = await Promise.all([countSince(db, 3_600_000), countSince(db, 86_400_000)]);
       if (hour >= PER_HOUR || day >= PER_DAY) {
@@ -192,5 +198,5 @@ export default {
       }
     }
     return Response.json({ model: MODEL, results });
-  }),
+  },
 };
