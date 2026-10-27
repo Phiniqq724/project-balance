@@ -43,7 +43,7 @@ export function TxSheet({ tx, categories, onClose }: Props) {
           <Label size={15} weight="medium" tone="muted" maxLines={2}>
             {transactionTitle(tx)}
           </Label>
-          <Money value={`${tx.direction === 'in' ? '+' : ''}${digits(tx.amount)}`} size={38} tone={tx.direction === 'in' ? 'accent' : 'text'} />
+          <Money value={`${tx.direction === 'in' ? '+' : ''}${digits(tx.amount)}`} size={38} tone={tx.direction === 'in' ? 'income' : 'text'} />
           <Label size={13} tone="muted">
             {`${sourceLabel(tx.source)}  ·  ${shortDate(tx.occurredAt)}, ${time(tx.occurredAt)}`}
           </Label>
@@ -79,7 +79,7 @@ export function TxSheet({ tx, categories, onClose }: Props) {
           <Switch
             value={isTransfer}
             onCheckedChange={toggleTransfer}
-            colors={{ checkedTrackColor: color.accent, checkedThumbColor: color.bg }}
+            colors={{ checkedTrackColor: color.text, checkedThumbColor: color.bg }}
           />
         </Row>
 

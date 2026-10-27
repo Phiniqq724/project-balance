@@ -17,6 +17,9 @@ internal data class RawNotification(
 internal object Ledger {
   // Same amount, opposite direction, two different apps within this window = money moved between your own accounts.
   private const val TRANSFER_PAIR_WINDOW_MS = 15 * 60 * 1000L
+  // An "ad or other" verdict this sure is put away without asking.
+  private const val AD_DISMISS_CONFIDENCE = 0.8
+  private const val MAX_AI_ATTEMPTS = 3
 
   private val writer = Executors.newSingleThreadExecutor { Thread(it, "balance-ledger") }
 
@@ -63,18 +66,133 @@ internal object Ledger {
   }
 
   private fun process(db: BalanceDb, rawId: Long, n: RawNotification) {
-    val status = when (val result = Parsers.parse(n.pkg, n.title, n.body)) {
-      is ParseResult.Transaction -> {
+    val sqlite = db.writableDatabase
+    // A decision the user already made on an AI suggestion wins over any rule.
+    val decided = review(sqlite, rawId)
+    if (decided?.state == "confirmed") {
+      insertReviewed(db, rawId, n, decided)
+      setStatus(sqlite, rawId, "parsed")
+      return
+    }
+    if (decided?.state == "rejected" || decided?.state == "dismissed") {
+      setStatus(sqlite, rawId, "ignored")
+      return
+    }
+
+    val ai = db.aiEnabled()
+    // Apps the user picked have no bank-specific rules; with AI on they skip the keyword guess.
+    val result = Parsers.parse(n.pkg, n.title, n.body, generic = !(ai && n.pkg !in Settings.DEFAULT_PACKAGES))
+    val status = when {
+      result is ParseResult.Transaction -> {
         insertTransaction(db, rawId, n, result.tx)
         "parsed"
       }
-      ParseResult.Unparsed -> "unparsed"
-      ParseResult.Ignored -> "ignored"
+      ai && Prefilter.isCandidate(n.title, n.body) -> {
+        sqlite.execSQL(
+          "INSERT OR IGNORE INTO ai_reviews (raw_id, state, updated_at) VALUES (?, 'pending', ?)",
+          arrayOf<Any>(rawId, System.currentTimeMillis())
+        )
+        "unparsed"
+      }
+      result == ParseResult.Unparsed -> "unparsed"
+      else -> "ignored"
     }
-    db.writableDatabase.execSQL("UPDATE raw_notifications SET status = ? WHERE id = ?", arrayOf<Any>(status, rawId))
+    setStatus(sqlite, rawId, status)
   }
 
-  private fun insertTransaction(db: BalanceDb, rawId: Long, n: RawNotification, tx: ParsedTransaction) {
+  private fun setStatus(sqlite: SQLiteDatabase, rawId: Long, status: String) {
+    sqlite.execSQL("UPDATE raw_notifications SET status = ? WHERE id = ?", arrayOf<Any>(status, rawId))
+  }
+
+  private class Review(
+    val state: String,
+    val kind: String?,
+    val direction: String?,
+    val amount: Long?,
+    val counterparty: String?,
+  )
+
+  private fun review(sqlite: SQLiteDatabase, rawId: Long): Review? =
+    sqlite.rawQuery(
+      "SELECT state, kind, direction, amount, counterparty FROM ai_reviews WHERE raw_id = ?",
+      arrayOf(rawId.toString())
+    ).use { c ->
+      if (!c.moveToFirst()) null
+      else Review(c.getString(0), c.getString(1), c.getString(2), if (c.isNull(3)) null else c.getLong(3), c.getString(4))
+    }
+
+  private fun insertReviewed(db: BalanceDb, rawId: Long, n: RawNotification, r: Review) {
+    val direction = if (r.direction == "in") Direction.IN else Direction.OUT
+    val tx = ParsedTransaction(direction, r.amount ?: 0L, r.counterparty?.takeIf { it.isNotBlank() })
+    val txId = insertTransaction(db, rawId, n, tx)
+    if (r.kind == "transfer") {
+      db.writableDatabase.execSQL("UPDATE transactions SET is_transfer = 1, transfer_locked = 1 WHERE id = ?", arrayOf<Any>(txId))
+    }
+  }
+
+  // ---- AI review (cloud mode). Called from JS through the module, on the writer thread. ----------
+
+  /** Turns AI review on or off and re-reads everything, so picked apps switch between AI and the keyword guess. */
+  fun setAiEnabled(db: BalanceDb, on: Boolean) {
+    db.setSetting(Settings.AI_REVIEW, if (on) "1" else "0")
+    reprocessAll(db)
+  }
+
+  /** Stores what the model thinks. A confident "ad or other" is put away without asking. */
+  fun suggest(db: BalanceDb, rawId: Long, kind: String, direction: String, amount: Long, counterparty: String?, confidence: Double) {
+    val sqlite = db.writableDatabase
+    val current = review(sqlite, rawId) ?: return
+    if (current.state != "pending" && current.state != "failed") return // The user got there first.
+    val dismiss = kind == "ad_or_other" && confidence >= AD_DISMISS_CONFIDENCE
+    sqlite.execSQL(
+      """
+      UPDATE ai_reviews SET state = ?, kind = ?, direction = ?, amount = ?, counterparty = ?, confidence = ?, updated_at = ?
+      WHERE raw_id = ?
+      """,
+      arrayOf<Any?>(if (dismiss) "dismissed" else "suggested", kind, direction, amount, counterparty, confidence, System.currentTimeMillis(), rawId)
+    )
+    if (dismiss) setStatus(sqlite, rawId, "ignored")
+  }
+
+  /** The function answered but had nothing for this one. After a few tries it waits for the user. */
+  fun reviewFailed(db: BalanceDb, rawId: Long) {
+    db.writableDatabase.execSQL(
+      """
+      UPDATE ai_reviews SET attempts = attempts + 1,
+        state = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE state END, updated_at = ?
+      WHERE raw_id = ? AND state = 'pending'
+      """,
+      arrayOf<Any>(MAX_AI_ATTEMPTS, System.currentTimeMillis(), rawId)
+    )
+  }
+
+  /**
+   * The user's answer. "ad_or_other" means not a transaction; anything else becomes a normal
+   * transaction with exactly these values.
+   */
+  fun resolve(db: BalanceDb, rawId: Long, kind: String, direction: String, amount: Long, counterparty: String?) {
+    val sqlite = db.writableDatabase
+    val n = sqlite.rawQuery("SELECT package, title, body, posted_at FROM raw_notifications WHERE id = ?", arrayOf(rawId.toString())).use { c ->
+      if (c.moveToFirst()) RawNotification(c.getString(0), c.getString(1), c.getString(2), c.getLong(3)) else null
+    } ?: return
+    val rejected = kind == "ad_or_other"
+    sqlite.beginTransaction()
+    try {
+      // No UPSERT: older Android releases ship SQLite without ON CONFLICT DO UPDATE.
+      sqlite.execSQL("INSERT OR IGNORE INTO ai_reviews (raw_id) VALUES (?)", arrayOf<Any>(rawId))
+      sqlite.execSQL(
+        "UPDATE ai_reviews SET state = ?, kind = ?, direction = ?, amount = ?, counterparty = ?, updated_at = ? WHERE raw_id = ?",
+        arrayOf<Any?>(if (rejected) "rejected" else "confirmed", kind, direction, amount, counterparty, System.currentTimeMillis(), rawId)
+      )
+      sqlite.execSQL("DELETE FROM transactions WHERE raw_id = ?", arrayOf<Any>(rawId))
+      process(db, rawId, n)
+      sqlite.setTransactionSuccessful()
+    } finally {
+      sqlite.endTransaction()
+    }
+  }
+
+  private fun insertTransaction(db: BalanceDb, rawId: Long, n: RawNotification, tx: ParsedTransaction): Long {
     val sqlite = db.writableDatabase
     val isSelf = tx.isPersonTransfer && SelfNameMatcher.matches(tx.counterparty, db.selfNames())
     val txId = sqlite.insert("transactions", null, ContentValues().apply {
@@ -89,6 +207,7 @@ internal object Ledger {
       put("occurred_at", n.postedAt)
     })
     pairTransfer(sqlite, txId, n.pkg, tx, n.postedAt)
+    return txId
   }
 
   private fun pairTransfer(db: SQLiteDatabase, txId: Long, source: String, tx: ParsedTransaction, at: Long) {
@@ -173,6 +292,7 @@ internal object Ledger {
 
     sqlite.beginTransaction()
     try {
+      if (db.aiEnabled()) keepLegacyGuesses(sqlite)
       sqlite.execSQL(
         "DELETE FROM transactions WHERE raw_id NOT IN (SELECT id FROM raw_notifications WHERE status = ?)",
         arrayOf(LedgerMerge.RESTORED)
@@ -199,6 +319,25 @@ internal object Ledger {
     } finally {
       sqlite.endTransaction()
     }
+  }
+
+  /**
+   * Picked apps used to go through the keyword guess. With AI review on they no longer do, so
+   * transactions already logged that way are kept as if the user had confirmed them.
+   */
+  private fun keepLegacyGuesses(sqlite: SQLiteDatabase) {
+    val builtIn = Settings.DEFAULT_PACKAGES.joinToString(",") { "'$it'" }
+    sqlite.execSQL(
+      """
+      INSERT OR IGNORE INTO ai_reviews (raw_id, state, kind, direction, amount, counterparty, updated_at)
+      SELECT t.raw_id, 'confirmed',
+        CASE WHEN t.is_transfer = 1 THEN 'transfer' WHEN t.direction = 'in' THEN 'income' ELSE 'expense' END,
+        t.direction, t.amount, t.counterparty, ?
+      FROM transactions t JOIN raw_notifications r ON r.id = t.raw_id
+      WHERE r.package NOT IN ($builtIn)
+      """,
+      arrayOf<Any>(System.currentTimeMillis())
+    )
   }
 
   /** Points the ledger at [userId]'s file, on the writer thread so no write lands in the wrong one. */

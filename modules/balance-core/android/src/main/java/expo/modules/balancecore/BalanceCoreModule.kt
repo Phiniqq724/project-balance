@@ -154,6 +154,25 @@ class BalanceCoreModule : Module() {
       Ledger.write(context) { db -> Ledger.reprocessAll(db) }
     }
 
+    // AI review (cloud mode). JS calls the edge function and hands results back here.
+    AsyncFunction("setAiReview") { on: Boolean ->
+      Ledger.write(context) { db -> Ledger.setAiEnabled(db, on) }
+    }
+
+    AsyncFunction("aiSuggest") { rawId: Long, kind: String, direction: String, amount: Long, counterparty: String?, confidence: Double ->
+      requireReview(kind, direction, amount)
+      Ledger.write(context) { db -> Ledger.suggest(db, rawId, kind, direction, amount, counterparty, confidence) }
+    }
+
+    AsyncFunction("aiFailed") { rawId: Long ->
+      Ledger.write(context) { db -> Ledger.reviewFailed(db, rawId) }
+    }
+
+    AsyncFunction("aiResolve") { rawId: Long, kind: String, direction: String, amount: Long, counterparty: String? ->
+      requireReview(kind, direction, amount)
+      Ledger.write(context) { db -> Ledger.resolve(db, rawId, kind, direction, amount, counterparty?.trim()?.takeIf { it.isNotEmpty() }) }
+    }
+
     // Supabase's session storage. Synchronous so the client can read it before the first render.
     Function("getAuthItem") { key: String -> Account.getAuthItem(context, key) }
     Function("setAuthItem") { key: String, value: String -> Account.setAuthItem(context, key, value) }
@@ -181,5 +200,11 @@ class BalanceCoreModule : Module() {
     AsyncFunction("refreshWidgets") {
       WidgetBridge.refresh(context)
     }
+  }
+
+  private fun requireReview(kind: String, direction: String, amount: Long) {
+    require(kind in setOf("income", "expense", "transfer", "ad_or_other")) { "Unknown kind $kind" }
+    require(direction == "in" || direction == "out") { "Unknown direction $direction" }
+    require(amount >= 0) { "Negative amount" }
   }
 }

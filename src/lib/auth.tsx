@@ -2,6 +2,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { LOCAL_OWNER } from '../../modules/balance-core/src/BalanceCoreModule';
+import { useAiReview } from './ai-review';
 import { BalanceCore } from './ledger';
 import { supabase } from './supabase';
 import { syncNow, useCloudSync } from './sync';
@@ -90,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function CloudSync({ userId }: { userId: string }) {
   useCloudSync(userId);
+  useAiReview(userId);
   return null;
 }
 

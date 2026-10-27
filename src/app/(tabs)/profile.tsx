@@ -35,6 +35,7 @@ import { useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 
 import type { InstalledApp } from '../../../modules/balance-core/src/BalanceCoreModule';
+import { AiReviewRow } from '@/components/ai-review-row';
 import { CategorySheet, fieldColors, fieldText } from '@/components/category-sheet';
 import { Chip, Failed, Label, Loading, Rule, Screen } from '@/components/kit';
 import {
@@ -47,7 +48,7 @@ import {
   sourceLabel,
   type Category,
 } from '@/lib/ledger';
-import { useUser } from '@/lib/auth';
+import { useSession, useUser } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import { changeAvatar, removeAvatar, saveUsername, useProfile } from '@/lib/profile';
 import { syncNow, useSyncStatus } from '@/lib/sync';
@@ -80,6 +81,7 @@ export default function ProfileScreen() {
 
 function ProfileBody({ data }: { data: Data }) {
   const [editing, setEditing] = useState<Category | 'new' | null>(null);
+  const signedIn = !!useSession();
 
   return (
     <>
@@ -115,6 +117,12 @@ function ProfileBody({ data }: { data: Data }) {
         <Rule />
         <Reprocess />
         <Rule />
+        {signedIn && (
+          <>
+            <AiReviewRow />
+            <Rule />
+          </>
+        )}
         <SignOut />
         <Rule />
         <Spacer modifiers={[height(space.navClearance)]} />

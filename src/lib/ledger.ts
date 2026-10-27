@@ -1,4 +1,4 @@
-import BalanceCore, { type Row } from '../../modules/balance-core/src/BalanceCoreModule';
+import BalanceCore, { type AiKind, type Row } from '../../modules/balance-core/src/BalanceCoreModule';
 
 export { BalanceCore };
 
@@ -32,11 +32,25 @@ export type RawNotification = {
   title: string | null;
   body: string;
   postedAt: Date;
+  /** AI's reading of this notification, when review is on. */
+  review: Review | null;
+};
+
+export type ReviewState = 'pending' | 'suggested' | 'failed';
+
+export type Review = {
+  state: ReviewState;
+  kind: AiKind | null;
+  direction: Direction | null;
+  amount: number | null;
+  counterparty: string | null;
+  confidence: number | null;
 };
 
 export const SETTINGS = {
   watchedPackages: 'watched_packages',
   selfNames: 'self_names',
+  aiReview: 'ai_review',
 } as const;
 
 /** Watched out of the box: the banks the parsers were written against. */
@@ -162,8 +176,10 @@ export async function getCategories(): Promise<Category[]> {
 
 export async function getUnparsed(): Promise<RawNotification[]> {
   const rows = await BalanceCore.query(
-    `SELECT id, package, title, body, posted_at FROM raw_notifications
-     WHERE status = 'unparsed' ORDER BY posted_at DESC LIMIT 200`
+    `SELECT r.id, r.package, r.title, r.body, r.posted_at,
+            a.state, a.kind, a.direction AS ai_direction, a.amount, a.counterparty, a.confidence
+     FROM raw_notifications r LEFT JOIN ai_reviews a ON a.raw_id = r.id
+     WHERE r.status = 'unparsed' ORDER BY r.posted_at DESC LIMIT 200`
   );
   return rows.map((r) => ({
     id: Number(r.id),
@@ -171,6 +187,17 @@ export async function getUnparsed(): Promise<RawNotification[]> {
     title: (r.title as string | null) ?? null,
     body: String(r.body),
     postedAt: new Date(Number(r.posted_at)),
+    review:
+      r.state === 'pending' || r.state === 'suggested' || r.state === 'failed'
+        ? {
+            state: r.state,
+            kind: (r.kind as AiKind | null) ?? null,
+            direction: r.ai_direction == null ? null : r.ai_direction === 'in' ? 'in' : 'out',
+            amount: r.amount == null ? null : Number(r.amount),
+            counterparty: (r.counterparty as string | null) ?? null,
+            confidence: r.confidence == null ? null : Number(r.confidence),
+          }
+        : null,
   }));
 }
 

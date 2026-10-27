@@ -33,12 +33,12 @@ export function Screen({ children, scroll = true }: { children: ReactNode; scrol
   );
 }
 
-type Tone = 'text' | 'muted' | 'accent' | 'danger';
+type Tone = 'text' | 'muted' | 'income' | 'danger';
 
 const toneColor: Record<Tone, string> = {
   text: color.text,
   muted: color.muted,
-  accent: color.accent,
+  income: color.income,
   danger: color.danger,
 };
 

@@ -1,6 +1,8 @@
 import { Column, LazyColumn, Row } from '@expo/ui/jetpack-compose';
 import { background, fillMaxSize, fillMaxWidth, padding, paddingAll, weight } from '@expo/ui/jetpack-compose/modifiers';
 
+import { ReviewActions } from '@/components/review';
+import { useSession } from '@/lib/auth';
 import { Failed, Label, Loading, Rule, Screen } from '@/components/kit';
 import { shortDate, time } from '@/lib/format';
 import { getUnparsed, sourceLabel } from '@/lib/ledger';
@@ -9,6 +11,7 @@ import { color, space } from '@/theme';
 
 export default function UnparsedScreen() {
   const state = useLedger(getUnparsed);
+  const cloud = !!useSession();
 
   return (
     <Screen>
@@ -47,6 +50,7 @@ export default function UnparsedScreen() {
                   <Label size={14} lineHeight={20} modifiers={[fillMaxWidth(), background(color.surface), paddingAll(12)]}>
                     {item.body}
                   </Label>
+                  {cloud && item.review && <ReviewActions n={item} />}
                 </Column>
               )}
             </LazyColumn.Items>
