@@ -29,10 +29,10 @@ internal object AiProviders {
     companion object {
       fun from(id: String?): Provider? = entries.firstOrNull { it.id == id }
 
-      /** AIza... is Gemini, sk-ant-... is Claude, any other sk-... is OpenAI. */
+      /** AIza... or AQ.... is Gemini (AI Studio now issues AQ. keys), sk-ant-... is Claude, any other sk-... is OpenAI. */
       fun detect(key: String): Provider? = when {
         key.length < 20 || key.any { it.isWhitespace() } -> null
-        key.startsWith("AIza") -> GEMINI
+        key.startsWith("AIza") || key.startsWith("AQ.") -> GEMINI
         key.startsWith("sk-ant-") -> ANTHROPIC
         key.startsWith("sk-") -> OPENAI
         else -> null
