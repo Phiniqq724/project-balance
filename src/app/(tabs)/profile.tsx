@@ -38,6 +38,7 @@ import { useWindowDimensions } from 'react-native';
 
 import type { InstalledApp } from '../../../modules/balance-core/src/BalanceCoreModule';
 import { AccountSwitch, LocalHeader } from '@/components/account-switch';
+import { AiKeyRow } from '@/components/ai-key-row';
 import { AiReviewRow } from '@/components/ai-review-row';
 import { DataRows } from '@/components/data-rows';
 import { ReviewAlertsRow } from '@/components/review-alerts-row';
@@ -111,7 +112,8 @@ function ProfileBody({ data }: { data: Data }) {
 
         <Head title="Reading" />
         <SettingsGroup>
-          {signedIn && <AiReviewRow />}
+          <AiKeyRow />
+          <AiReviewRow />
           <ReviewAlertsRow />
           <Reprocess />
         </SettingsGroup>

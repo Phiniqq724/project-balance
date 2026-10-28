@@ -7,10 +7,11 @@ import { supabase } from './supabase';
 import { LOCAL_OWNER, type AiKind } from '../../modules/balance-core/src/BalanceCoreModule';
 
 /**
- * AI review (cloud accounts only). Notifications no rule understood and that look like money
- * wait in `ai_reviews` as 'pending'. The native side drains them in the background through the
- * classify-notification function (AiReviewWorker), which only ever produces suggestions: nothing
- * reaches the ledger until the user confirms (see components/review.tsx).
+ * AI review. Notifications no rule understood and that look like money wait in `ai_reviews` as
+ * 'pending'. The native side drains them in the background (AiReviewWorker): with your own key
+ * (see ai-key.ts) straight to the provider, otherwise, for cloud accounts, through the
+ * classify-notification function. Results are only suggestions: nothing reaches the ledger until
+ * the user confirms (see components/review.tsx).
  */
 
 const DEBOUNCE_MS = 1500;
@@ -43,7 +44,7 @@ export function useAiReview(userId: string) {
 
 export type Verdict = { kind: AiKind; direction: Direction; amount: number; counterparty: string | null };
 
-/** The user's answer: logs it (or drops it) on the phone, then keeps it as a few-shot example for next time. */
+/** The user's answer: logs it (or drops it) on the phone, which also keeps it as a few-shot example; cloud accounts share it too. */
 export async function answerReview(n: RawNotification, v: Verdict): Promise<void> {
   const counterparty = v.counterparty?.trim() || null;
   await BalanceCore.aiResolve(n.id, v.kind, v.direction, v.amount, counterparty);

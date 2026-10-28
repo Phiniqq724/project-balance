@@ -20,6 +20,7 @@ internal object Ledger {
   // An "ad or other" verdict this sure is put away without asking.
   private const val AD_DISMISS_CONFIDENCE = 0.8
   private const val MAX_AI_ATTEMPTS = 3
+  private const val MAX_EXAMPLES = 100
 
   private val writer = Executors.newSingleThreadExecutor { Thread(it, "balance-ledger") }
 
@@ -189,10 +190,23 @@ internal object Ledger {
       )
       sqlite.execSQL("DELETE FROM transactions WHERE raw_id = ?", arrayOf<Any>(rawId))
       process(db, rawId, n)
+      rememberAnswer(sqlite, n, kind, direction, amount, counterparty)
       sqlite.setTransactionSuccessful()
     } finally {
       sqlite.endTransaction()
     }
+  }
+
+  /** Keeps the answer as a few-shot example for reading with the user's own key. */
+  private fun rememberAnswer(sqlite: SQLiteDatabase, n: RawNotification, kind: String, direction: String, amount: Long, counterparty: String?) {
+    sqlite.insert("ai_examples", null, ContentValues().apply {
+      put("text", Redact.text(listOfNotNull(n.title?.takeIf { it.isNotEmpty() }, n.body).joinToString(" - ")))
+      put("kind", kind)
+      put("direction", direction)
+      put("amount", amount)
+      put("counterparty", counterparty)
+    })
+    sqlite.execSQL("DELETE FROM ai_examples WHERE id NOT IN (SELECT id FROM ai_examples ORDER BY id DESC LIMIT $MAX_EXAMPLES)")
   }
 
   private fun insertTransaction(db: BalanceDb, rawId: Long, n: RawNotification, tx: ParsedTransaction): Long {

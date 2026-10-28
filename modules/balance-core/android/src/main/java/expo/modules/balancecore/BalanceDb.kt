@@ -13,7 +13,7 @@ import java.util.UUID
  * Each account, and local mode, gets its own file; see [Account].
  */
 internal class BalanceDb private constructor(context: Context, val name: String) :
-  SQLiteOpenHelper(context.applicationContext, name, null, 3) {
+  SQLiteOpenHelper(context.applicationContext, name, null, 4) {
   val appContext: Context = context.applicationContext
 
   override fun onConfigure(db: SQLiteDatabase) {
@@ -68,6 +68,7 @@ internal class BalanceDb private constructor(context: Context, val name: String)
     db.execSQL("CREATE INDEX transactions_occurred_at ON transactions(occurred_at)")
     db.execSQL("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     createAiReviews(db)
+    createAiExamples(db)
 
     seedCategories(db)
     db.insert("settings", null, ContentValues().apply {
@@ -89,6 +90,7 @@ internal class BalanceDb private constructor(context: Context, val name: String)
       db.execSQL("CREATE UNIQUE INDEX raw_notifications_uid ON raw_notifications(uid)")
     }
     if (oldVersion < 3) createAiReviews(db)
+    if (oldVersion < 4) createAiExamples(db)
   }
 
   /**
@@ -113,6 +115,22 @@ internal class BalanceDb private constructor(context: Context, val name: String)
       """
     )
     db.execSQL("CREATE INDEX ai_reviews_state ON ai_reviews(state)")
+  }
+
+  /** The user's own answers to AI suggestions, redacted, shown to the model next time. Own-key reading only; cloud users keep theirs in Supabase. */
+  private fun createAiExamples(db: SQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE ai_examples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        text TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        counterparty TEXT
+      )
+      """
+    )
   }
 
   private fun seedCategories(db: SQLiteDatabase) {

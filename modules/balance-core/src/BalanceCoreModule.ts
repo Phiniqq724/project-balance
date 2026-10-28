@@ -9,6 +9,9 @@ export type Row = Record<string, SqlValue>;
 
 export type AiKind = 'income' | 'expense' | 'transfer' | 'ad_or_other';
 
+export type AiProvider = 'gemini' | 'openai' | 'anthropic';
+export type AiKeyInfo = { provider: AiProvider; last4: string; status: string | null };
+
 export type InstalledApp = { package: string; label: string; icon: string | null };
 
 declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
@@ -29,6 +32,14 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   setAiReview(on: boolean): Promise<void>;
   /** Queues a background pass over notifications waiting for AI. Cheap, safe to call often. */
   runAiReview(): Promise<void>;
+  /**
+   * Checks your own AI key with one tiny real call and keeps it, encrypted, on this phone only.
+   * The provider comes from the key. Rejects with ERR_BAD_KEY, ERR_NO_CREDIT, ERR_UNKNOWN_KEY or ERR_NETWORK.
+   */
+  setAiKey(key: string): Promise<{ provider: AiProvider; last4: string }>;
+  /** The saved key's provider and last four characters (never the key), and why it stopped working, if it did. */
+  aiKeyInfo(): AiKeyInfo | null;
+  clearAiKey(): Promise<void>;
   /** Hands the Supabase URL and publishable key to the native side, for background calls. */
   setCloudConfig(url: string, key: string): void;
   openNotificationSettings(): void;

@@ -164,6 +164,23 @@ class BalanceCoreModule : Module() {
       AiReview.kick(context)
     }
 
+    // The user's own AI key. Stays on this phone; JS only gets the provider and the last four characters.
+    AsyncFunction("setAiKey") { key: String ->
+      val info = AiKey.validateAndSave(context, key)
+      AiReview.kick(context)
+      mapOf("provider" to info.provider, "last4" to info.last4)
+    }
+
+    Function("aiKeyInfo") {
+      AiKey.info(context)?.let { mapOf("provider" to it.provider, "last4" to it.last4, "status" to it.status) }
+    }
+
+    AsyncFunction("clearAiKey") {
+      AiKey.clear(context)
+      // Local mode has no other way to read, so AI review goes off with the key.
+      if (Account.userId(context) == Account.LOCAL) Ledger.write(context) { db -> Ledger.setAiEnabled(db, false) }
+    }
+
     // Lets background work call Supabase without the JS runtime.
     Function("setCloudConfig") { url: String, key: String -> Account.setCloudConfig(context, url, key) }
 
