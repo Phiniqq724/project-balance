@@ -18,6 +18,7 @@ import { useState } from 'react';
 
 import { FlowChart } from '../../../modules/balance-core/src/FlowChart';
 import { HeatLegend, Heatmap } from '@/components/heatmap';
+import { RefreshButton } from '@/components/refresh-button';
 import { Failed, Label, Loading, Money, Rule, Screen } from '@/components/kit';
 import { analyticsStart, analyze, PERIODS, type Analysis, type Period, type Share } from '@/lib/analytics';
 import { digits, rupiah, shortDate } from '@/lib/format';
@@ -61,6 +62,7 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
       {!data.hasAccess && <AccessBanner />}
 
       <Row horizontalArrangement="end" modifiers={[fillMaxWidth(), padding(0, 4, 8, 0)]}>
+        <RefreshButton />
         <InboxBell count={data.unparsed} />
       </Row>
 

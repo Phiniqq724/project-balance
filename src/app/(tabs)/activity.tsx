@@ -12,6 +12,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { Chip, Failed, Label, Loading, Rule, Screen } from '@/components/kit';
+import { RefreshButton } from '@/components/refresh-button';
 import { TxRow } from '@/components/tx-row';
 import { TxSheet } from '@/components/tx-sheet';
 import { dayKey, dayLabel, digits } from '@/lib/format';
@@ -90,14 +91,15 @@ export default function ActivityScreen() {
   return (
     <Screen>
       <Column modifiers={[fillMaxSize()]}>
-        <Column modifiers={[fillMaxWidth(), padding(space.page, 28, space.page, 0)]} verticalArrangement={{ spacedBy: 4 }}>
-          <Row verticalAlignment="bottom" modifiers={[fillMaxWidth()]}>
+        <Column modifiers={[fillMaxWidth(), padding(space.page, 18, space.page - 12, 0)]} verticalArrangement={{ spacedBy: 4 }}>
+          <Row verticalAlignment="center" modifiers={[fillMaxWidth()]}>
             <Label size={28} weight="bold" modifiers={[weight(1)]}>
               Activity
             </Label>
-            <Label size={13} tone="muted" modifiers={[padding(0, 0, 0, 6)]}>
+            <Label size={13} tone="muted">
               {visible.length === 1 ? '1 entry' : `${visible.length} entries`}
             </Label>
+            <RefreshButton />
           </Row>
           <Row horizontalArrangement={{ spacedBy: 16 }}>
             <Label size={14} weight="medium" tone="accent">{`−${digits(out)}`}</Label>
