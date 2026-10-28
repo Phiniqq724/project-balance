@@ -26,6 +26,8 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   deleteCategory(id: string): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+  /** Keeps these bank rules for the listener and re-reads the open ledger if they changed. Rejects on a bad pattern. */
+  setParseRules(json: string): Promise<boolean>;
   reprocessAll(): Promise<void>;
   refreshWidgets(): Promise<void>;
   /** Turns AI review on or off and re-reads every notification. */

@@ -71,10 +71,13 @@ internal object Ledger {
 
   private fun process(db: BalanceDb, rawId: Long, n: RawNotification) {
     val sqlite = db.writableDatabase
-    // A decision the user already made on an AI suggestion wins over any rule.
+    val rules = Parsers.rules(db.appContext)
+    // A decision the user already made on an AI suggestion wins over the keyword guess.
     val decided = review(sqlite, rawId)
     if (decided?.state == "confirmed") {
-      insertReviewed(db, rawId, n, decided)
+      // A bank rule added after the answer also reads the name and category; the answer's other choices stay.
+      val bank = (Parsers.parse(rules, n.pkg, n.title, n.body, generic = false) as? ParseResult.Transaction)?.tx
+      insertReviewed(db, rawId, n, decided, bank)
       setStatus(sqlite, rawId, "parsed")
       return
     }
@@ -85,7 +88,7 @@ internal object Ledger {
 
     val ai = db.aiEnabled()
     // Apps the user picked have no bank-specific rules; with AI on they skip the keyword guess.
-    val result = Parsers.parse(n.pkg, n.title, n.body, generic = !(ai && n.pkg !in Settings.DEFAULT_PACKAGES))
+    val result = Parsers.parse(rules, n.pkg, n.title, n.body, generic = !(ai && n.pkg !in Settings.DEFAULT_PACKAGES))
     val status = when {
       result is ParseResult.Transaction -> {
         insertTransaction(db, rawId, n, result.tx)
@@ -125,9 +128,9 @@ internal object Ledger {
       else Review(c.getString(0), c.getString(1), c.getString(2), if (c.isNull(3)) null else c.getLong(3), c.getString(4))
     }
 
-  private fun insertReviewed(db: BalanceDb, rawId: Long, n: RawNotification, r: Review) {
+  private fun insertReviewed(db: BalanceDb, rawId: Long, n: RawNotification, r: Review, bank: ParsedTransaction?) {
     val direction = if (r.direction == "in") Direction.IN else Direction.OUT
-    val tx = ParsedTransaction(direction, r.amount ?: 0L, r.counterparty?.takeIf { it.isNotBlank() })
+    val tx = bank ?: ParsedTransaction(direction, r.amount ?: 0L, r.counterparty?.takeIf { it.isNotBlank() })
     val txId = insertTransaction(db, rawId, n, tx)
     if (r.kind == "transfer") {
       db.writableDatabase.execSQL("UPDATE transactions SET is_transfer = 1, transfer_locked = 1 WHERE id = ?", arrayOf<Any>(txId))
@@ -282,6 +285,16 @@ internal object Ledger {
     } finally {
       sqlite.endTransaction()
     }
+  }
+
+  /** Stores new bank rules from JS and re-reads this ledger once per rule change. Resolves true if it re-read. */
+  fun applyRules(db: BalanceDb, json: String): Boolean {
+    Parsers.setRules(db.appContext, json)
+    val version = json.hashCode().toString(16) + ":" + json.length
+    if (db.getSetting(Settings.PARSE_RULES) == version) return false
+    reprocessAll(db)
+    db.setSetting(Settings.PARSE_RULES, version)
+    return true
   }
 
   /**

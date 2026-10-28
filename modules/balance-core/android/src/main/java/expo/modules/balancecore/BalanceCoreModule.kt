@@ -150,6 +150,10 @@ class BalanceCoreModule : Module() {
       }
     }
 
+    AsyncFunction("setParseRules") { json: String ->
+      Ledger.write(context) { db -> Ledger.applyRules(db, json) }
+    }
+
     AsyncFunction("reprocessAll") {
       Ledger.write(context) { db -> Ledger.reprocessAll(db) }
     }

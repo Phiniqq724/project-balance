@@ -1,5 +1,7 @@
 package expo.modules.balancecore
 
+import android.content.Context
+import org.json.JSONObject
 import kotlin.math.roundToLong
 
 internal enum class Direction(val value: String) { IN("in"), OUT("out") }
@@ -9,8 +11,6 @@ internal data class ParsedTransaction(
   val amount: Long,
   val counterparty: String? = null,
   val bankCategory: String? = null,
-  // The bank text itself says money moved between people (not a merchant payment).
-  val isPersonTransfer: Boolean = false,
 )
 
 internal sealed interface ParseResult {
@@ -21,78 +21,91 @@ internal sealed interface ParseResult {
   data object Ignored : ParseResult
 }
 
+/**
+ * Bank rules come from JS (src/lib/parse-rules.ts) so they ship by OTA update. They are kept in
+ * prefs, not a ledger, so the listener reads them with the app closed and for every account.
+ */
+internal class RuleSet(
+  val strip: List<Regex>,
+  val rules: List<Rule>,
+  val promo: Regex?,
+  val outWords: Regex?,
+  val inWords: Regex?,
+) {
+  // Group numbers count the one `{amount}` adds. 0 = not captured. Direction null = not a transaction.
+  class Rule(val packages: Set<String>, val regex: Regex, val direction: Direction?, val amount: Int, val who: Int, val category: Int)
+}
+
 internal object Parsers {
-  const val JAGO = "com.jago.digitalBanking"
-  const val MYBCA = "com.bca.mybca.omni.android"
-
-  private const val AMOUNT = """(?:Rp|IDR)\s?([\d.,]+)"""
-
-  private val jagoPaid = Regex("""^You have paid $AMOUNT to (.+)$""", RegexOption.IGNORE_CASE)
-  private val jagoTransferred = Regex("""^You've transferred $AMOUNT to (.+)$""", RegexOption.IGNORE_CASE)
-  private val jagoReceived = Regex("""^(.+?) has sent $AMOUNT to you$""", RegexOption.IGNORE_CASE)
-  // Between the owner's own Pockets: no money in or out.
-  private val jagoPocketMove = Regex("""^$AMOUNT has been moved from your .+ to your .+$""", RegexOption.IGNORE_CASE)
-
-  private val bcaSpent = Regex("""^You spent $AMOUNT at (.+)$""", RegexOption.IGNORE_CASE)
-  private val bcaReceivedFrom = Regex("""^You received $AMOUNT from (.+) at (.+?) category$""", RegexOption.IGNORE_CASE)
-  private val bcaReceived = Regex("""^You received $AMOUNT at (.+?) category$""", RegexOption.IGNORE_CASE)
+  private const val AMOUNT = """(?:Rp|IDR)\.?\s?([\d.,]+)"""
+  private const val PREFS = "balance.parser"
+  private const val KEY_RULES = "rules"
 
   private val anyAmount = Regex(AMOUNT, RegexOption.IGNORE_CASE)
-  private val promo = Regex("""\b(cashback|promo|voucher|diskon|discount|menangkan|hadiah|reward|poin|points)\b""", RegexOption.IGNORE_CASE)
-  private val outWords = Regex("""\b(paid|spent|transferred|payment|pembayaran|bayar|transfer ke|debit|keluar)\b""", RegexOption.IGNORE_CASE)
-  private val inWords = Regex("""\b(received|sent .* to you|diterima|masuk|menerima|kredit|credit)\b""", RegexOption.IGNORE_CASE)
+  private val empty = RuleSet(emptyList(), emptyList(), null, null, null)
+
+  @Volatile private var cached: Pair<String, RuleSet>? = null
+
+  fun rules(context: Context): RuleSet {
+    val json = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_RULES, null) ?: return empty
+    cached?.let { (source, set) -> if (source == json) return set }
+    val set = runCatching { compile(json) }.getOrDefault(empty)
+    cached = json to set
+    return set
+  }
+
+  /** Stores new rules. Throws, keeping the old ones, if any pattern doesn't compile. */
+  fun setRules(context: Context, json: String) {
+    val set = compile(json)
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_RULES, json).commit()
+    cached = json to set
+  }
+
+  private fun compile(json: String): RuleSet {
+    val root = JSONObject(json)
+    fun regex(pattern: String) = Regex(pattern.replace("{amount}", AMOUNT), RegexOption.IGNORE_CASE)
+    fun optRegex(obj: JSONObject?, key: String) = obj?.optString(key)?.takeIf { it.isNotEmpty() }?.let(::regex)
+    val strip = root.optJSONArray("strip")?.let { a -> List(a.length()) { regex(a.getString(it)) } }.orEmpty()
+    val rules = root.optJSONArray("rules")?.let { a ->
+      List(a.length()) { i ->
+        val r = a.getJSONObject(i)
+        val packages = r.getJSONArray("packages").let { p -> List(p.length()) { p.getString(it) }.toSet() }
+        val direction = when (val d = r.getString("direction")) {
+          "in" -> Direction.IN
+          "out" -> Direction.OUT
+          "ignore" -> null
+          else -> throw IllegalArgumentException("Unknown direction $d")
+        }
+        RuleSet.Rule(packages, regex(r.getString("pattern")), direction, r.optInt("amount", 1), r.optInt("who"), r.optInt("category"))
+      }
+    }.orEmpty()
+    val generic = root.optJSONObject("generic")
+    return RuleSet(strip, rules, optRegex(generic, "promo"), optRegex(generic, "out"), optRegex(generic, "in"))
+  }
 
   /** [generic] off = only the bank-specific rules; anything else is left for AI review. */
-  fun parse(pkg: String, title: String?, body: String, generic: Boolean = true): ParseResult {
-    val text = normalize(body)
-    if (pkg == JAGO && jagoPocketMove.matches(text)) return ParseResult.Ignored
-
-    val specific = when (pkg) {
-      JAGO -> parseJago(text)
-      MYBCA -> parseMyBca(text)
-      else -> null
+  fun parse(rules: RuleSet, pkg: String, title: String?, body: String, generic: Boolean = true): ParseResult {
+    val text = normalize(body, rules.strip)
+    for (rule in rules.rules) {
+      if (pkg !in rule.packages) continue
+      val m = rule.regex.matchEntire(text) ?: continue
+      val direction = rule.direction ?: return ParseResult.Ignored
+      fun group(i: Int) = m.groupValues.getOrNull(i)?.takeIf { i > 0 }?.let(::cleanName)?.takeIf { it.isNotEmpty() }
+      val value = amount(m.groupValues.getOrElse(rule.amount) { "" }) ?: continue
+      return ParseResult.Transaction(ParsedTransaction(direction, value, group(rule.who), group(rule.category)))
     }
-    if (specific != null) return ParseResult.Transaction(specific)
 
     if (!anyAmount.containsMatchIn(text)) return ParseResult.Ignored
-    if (promo.containsMatchIn(text)) return ParseResult.Ignored
+    if (rules.promo?.containsMatchIn(text) == true) return ParseResult.Ignored
     if (!generic) return ParseResult.Unparsed
-    return parseGeneric(text)?.let { ParseResult.Transaction(it) } ?: ParseResult.Unparsed
-  }
-
-  private fun parseJago(text: String): ParsedTransaction? {
-    jagoPaid.matchEntire(text)?.let { m ->
-      return ParsedTransaction(Direction.OUT, amount(m.groupValues[1]) ?: return null, cleanName(m.groupValues[2]))
-    }
-    jagoTransferred.matchEntire(text)?.let { m ->
-      return ParsedTransaction(Direction.OUT, amount(m.groupValues[1]) ?: return null, cleanName(m.groupValues[2]), isPersonTransfer = true)
-    }
-    jagoReceived.matchEntire(text)?.let { m ->
-      return ParsedTransaction(Direction.IN, amount(m.groupValues[2]) ?: return null, cleanName(m.groupValues[1]), isPersonTransfer = true)
-    }
-    return null
-  }
-
-  private fun parseMyBca(text: String): ParsedTransaction? {
-    bcaSpent.matchEntire(text)?.let { m ->
-      val category = cleanName(m.groupValues[2])
-      return ParsedTransaction(Direction.OUT, amount(m.groupValues[1]) ?: return null, bankCategory = category, isPersonTransfer = category.isTransferCategory())
-    }
-    bcaReceivedFrom.matchEntire(text)?.let { m ->
-      val category = cleanName(m.groupValues[3])
-      return ParsedTransaction(Direction.IN, amount(m.groupValues[1]) ?: return null, cleanName(m.groupValues[2]), category, category.isTransferCategory())
-    }
-    bcaReceived.matchEntire(text)?.let { m ->
-      return ParsedTransaction(Direction.IN, amount(m.groupValues[1]) ?: return null, bankCategory = cleanName(m.groupValues[2]))
-    }
-    return null
+    return parseGeneric(rules, text)?.let { ParseResult.Transaction(it) } ?: ParseResult.Unparsed
   }
 
   // Last resort for apps without dedicated rules: needs an amount and one clear direction word.
-  private fun parseGeneric(text: String): ParsedTransaction? {
+  private fun parseGeneric(rules: RuleSet, text: String): ParsedTransaction? {
     val value = anyAmount.find(text)?.groupValues?.get(1)?.let(::amount) ?: return null
-    val isOut = outWords.containsMatchIn(text)
-    val isIn = inWords.containsMatchIn(text)
+    val isOut = rules.outWords?.containsMatchIn(text) == true
+    val isIn = rules.inWords?.containsMatchIn(text) == true
     return when {
       isOut && !isIn -> ParsedTransaction(Direction.OUT, value)
       isIn && !isOut -> ParsedTransaction(Direction.IN, value)
@@ -100,11 +113,10 @@ internal object Parsers {
     }
   }
 
-  /** Strips zero-width characters (Jago puts them inside names), the help-line footer and extra spaces. */
-  fun normalize(body: String): String =
-    body
-      .replace(Regex("[\\u200B-\\u200D\\u2060\\uFEFF]"), "")
-      .replace(Regex("""\s*Need help\?.*$""", RegexOption.IGNORE_CASE), "")
+  /** Strips zero-width characters (Jago puts them inside names), footers like the help line and extra spaces. */
+  fun normalize(body: String, strip: List<Regex> = emptyList()): String =
+    strip
+      .fold(body.replace(Regex("[\\u200B-\\u200D\\u2060\\uFEFF]"), "")) { text, footer -> footer.replace(text, "") }
       .replace(Regex("""\s+"""), " ")
       .trim()
       .trimEnd('.')
@@ -125,9 +137,8 @@ internal object Parsers {
     return normalized.toDoubleOrNull()?.roundToLong()
   }
 
-  private fun cleanName(raw: String): String = raw.trim().trimEnd('.').trim()
-
-  private fun String.isTransferCategory() = contains("transfer", ignoreCase = true)
+  // Jago wraps some merchant names in dots: "ke .DUNIA ELEKTRIK..".
+  private fun cleanName(raw: String): String = raw.trim().trimStart('.').trim()
 }
 
 /**

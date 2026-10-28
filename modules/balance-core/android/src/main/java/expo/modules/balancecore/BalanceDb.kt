@@ -249,6 +249,8 @@ internal object Settings {
   const val AI_REVIEW = "ai_review"
   // "0" = no notifications for items that need an answer; anything else (or unset) = on.
   const val REVIEW_ALERTS = "review_alerts"
+  // Which bank rules this ledger was last read with, so a rule update re-reads it once.
+  const val PARSE_RULES = "parse_rules"
 
   val DEFAULT_PACKAGES = listOf(
     "com.jago.digitalBanking",

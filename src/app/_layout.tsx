@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 
 import { AuthProvider, useAccount } from '@/lib/auth';
 import { BalanceCore } from '@/lib/ledger';
+import { applyParseRules } from '@/lib/parse-rules';
 import { color } from '@/theme';
 // Registers widget layouts with the native side so dev reloads pick up layout edits.
 import '@/widgets/month-pulse';
@@ -39,6 +40,13 @@ function Routes() {
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
+
+  // Bank rules ship with the JS, so an OTA update reaches the listener here. Each ledger is re-read once per change.
+  const ledgerOpen = account !== undefined && account.mode !== 'none';
+  const owner = account?.mode === 'cloud' ? account.session.user.id : account?.mode;
+  useEffect(() => {
+    if (ledgerOpen) applyParseRules().catch(() => {});
+  }, [ledgerOpen, owner]);
 
   if (!ready) return null;
   return (
