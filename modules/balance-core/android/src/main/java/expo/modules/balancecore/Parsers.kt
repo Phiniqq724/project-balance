@@ -30,6 +30,8 @@ internal object Parsers {
   private val jagoPaid = Regex("""^You have paid $AMOUNT to (.+)$""", RegexOption.IGNORE_CASE)
   private val jagoTransferred = Regex("""^You've transferred $AMOUNT to (.+)$""", RegexOption.IGNORE_CASE)
   private val jagoReceived = Regex("""^(.+?) has sent $AMOUNT to you$""", RegexOption.IGNORE_CASE)
+  // Between the owner's own Pockets: no money in or out.
+  private val jagoPocketMove = Regex("""^$AMOUNT has been moved from your .+ to your .+$""", RegexOption.IGNORE_CASE)
 
   private val bcaSpent = Regex("""^You spent $AMOUNT at (.+)$""", RegexOption.IGNORE_CASE)
   private val bcaReceivedFrom = Regex("""^You received $AMOUNT from (.+) at (.+?) category$""", RegexOption.IGNORE_CASE)
@@ -43,6 +45,7 @@ internal object Parsers {
   /** [generic] off = only the bank-specific rules; anything else is left for AI review. */
   fun parse(pkg: String, title: String?, body: String, generic: Boolean = true): ParseResult {
     val text = normalize(body)
+    if (pkg == JAGO && jagoPocketMove.matches(text)) return ParseResult.Ignored
 
     val specific = when (pkg) {
       JAGO -> parseJago(text)
