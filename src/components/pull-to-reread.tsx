@@ -18,6 +18,8 @@ export function PullToReread({ children }: { children: ReactNode }) {
     <PullToRefreshBox
       isRefreshing={running}
       onRefresh={() => void run()}
+      // The spinner follows the box's alignment; Expo UI drops Compose's default top-center.
+      contentAlignment="topCenter"
       indicator={{ color: color.accent, containerColor: color.raised }}
       modifiers={[fillMaxSize()]}>
       {children}
