@@ -2,12 +2,15 @@ package expo.modules.balancecore
 
 import android.app.Activity
 import android.util.Base64
+import androidx.credentials.Credential
 import androidx.credentials.CredentialManager
+import androidx.credentials.CredentialOption
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
@@ -20,7 +23,9 @@ internal class NoGoogleAccount(cause: Throwable) : CodedException("ERR_NO_ACCOUN
 internal class GoogleSignInFailed(cause: Throwable?) : CodedException("ERR_GOOGLE_SIGN_IN", cause?.message ?: "Google sign-in failed", cause)
 
 /**
- * The "Sign in with Google" sheet from Credential Manager, no browser. Google gets the SHA-256 of a
+ * Credential Manager's account bottom sheet, no browser: accounts already used here first (one taps
+ * in by itself), then every account on the phone. The full "Sign in with Google" dialog is only the
+ * fallback for a phone with no Google account, since it can add one. Google gets the SHA-256 of a
  * fresh nonce; the raw nonce goes back to JS for Supabase, which checks it against the ID token.
  */
 internal object GoogleSignIn {
@@ -30,18 +35,27 @@ internal object GoogleSignIn {
     }
     val hashed = MessageDigest.getInstance("SHA-256").digest(nonce.toByteArray()).joinToString("") { "%02x".format(it) }
 
-    val option = GetSignInWithGoogleOption.Builder(serverClientId).setNonce(hashed).build()
-    val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
-
-    val credential = try {
-      CredentialManager.create(activity).getCredential(activity, request).credential
+    val manager = CredentialManager.create(activity)
+    suspend fun get(option: CredentialOption): Credential? = try {
+      manager.getCredential(activity, GetCredentialRequest.Builder().addCredentialOption(option).build()).credential
+    } catch (e: NoCredentialException) {
+      null
     } catch (e: GetCredentialCancellationException) {
       throw GoogleSignInCancelled()
-    } catch (e: NoCredentialException) {
-      throw NoGoogleAccount(e)
     } catch (e: GetCredentialException) {
       throw GoogleSignInFailed(e)
     }
+    fun sheet(returning: Boolean) = GetGoogleIdOption.Builder()
+      .setServerClientId(serverClientId)
+      .setNonce(hashed)
+      .setFilterByAuthorizedAccounts(returning)
+      .setAutoSelectEnabled(returning)
+      .build()
+
+    val credential = get(sheet(returning = true))
+      ?: get(sheet(returning = false))
+      ?: get(GetSignInWithGoogleOption.Builder(serverClientId).setNonce(hashed).build())
+      ?: throw NoGoogleAccount(NoCredentialException())
 
     if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
       throw GoogleSignInFailed(null)
@@ -52,5 +66,10 @@ internal object GoogleSignIn {
       throw GoogleSignInFailed(e)
     }
     return mapOf("idToken" to token, "nonce" to nonce)
+  }
+
+  /** After signing out, so the next sign-in shows the accounts instead of picking the last one. */
+  suspend fun forget(context: android.content.Context) {
+    runCatching { CredentialManager.create(context).clearCredentialState(androidx.credentials.ClearCredentialStateRequest()) }
   }
 }

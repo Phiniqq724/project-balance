@@ -62,6 +62,7 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   importLedger(uri: string): Promise<{ added: number; existing: number; newCategories: number }>;
   /** Credential Manager "Sign in with Google". Rejects with code ERR_CANCELLED, ERR_NO_ACCOUNT or ERR_GOOGLE_SIGN_IN. */
   signInWithGoogle(serverClientId: string): Promise<{ idToken: string; nonce: string }>;
+  forgetGoogleAccount(): Promise<void>;
 }
 
 export type LedgerImportPreview = {

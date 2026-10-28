@@ -67,6 +67,7 @@ export async function signOut(): Promise<void> {
   const { data } = await supabase.auth.getSession();
   if (data.session) await syncNow(data.session.user.id);
   await supabase.auth.signOut({ scope: 'local' });
+  await BalanceCore.forgetGoogleAccount().catch(() => undefined);
   await apply(null);
 }
 

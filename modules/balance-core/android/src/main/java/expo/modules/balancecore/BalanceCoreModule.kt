@@ -192,6 +192,10 @@ class BalanceCoreModule : Module() {
       }
     }
 
+    AsyncFunction("forgetGoogleAccount") Coroutine { ->
+      GoogleSignIn.forget(context)
+    }
+
     AsyncFunction("signInWithGoogle") Coroutine { serverClientId: String ->
       val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
       GoogleSignIn.signIn(activity, serverClientId)
