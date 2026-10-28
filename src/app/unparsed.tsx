@@ -59,7 +59,7 @@ export default function UnparsedScreen() {
             modifiers={[fillMaxSize()]}
             verticalArrangement={{ spacedBy: 10 }}
             contentPadding={{ start: space.page, end: space.page, top: 8, bottom: 32 }}>
-            <LazyColumn.Items data={fixId ? [...state.data].sort((a, b) => Number(b.id === fixId) - Number(a.id === fixId)) : state.data} keyExtractor={(n) => String(n.id)}>
+            <LazyColumn.Items data={fixId ? [...state.data].sort((a, b) => Number(b.id === fixId) - Number(a.id === fixId)) : state.data} keyExtractor={(n) => String(n.id)} recycling={false}>
               {({ item }) => (
                 <Card
                   n={item}
