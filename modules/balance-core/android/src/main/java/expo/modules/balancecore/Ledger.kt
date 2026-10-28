@@ -60,8 +60,11 @@ internal object Ledger {
       )
       if (rawId == -1L) continue // Already stored (re-posted or backfilled twice).
       process(db, rawId, n)
+      // Live only: a bulk re-read or import must not ping for old notifications.
+      ReviewNotifier.notifyOpen(context, db, rawId, recentOnly = false)
       changed = true
     }
+    if (changed) AiReview.kick(context)
     return changed
   }
 
@@ -130,7 +133,7 @@ internal object Ledger {
     }
   }
 
-  // ---- AI review (cloud mode). Called from JS through the module, on the writer thread. ----------
+  // ---- AI review (cloud mode). Called from the module and the AI worker, on the writer thread. ----
 
   /** Turns AI review on or off and re-reads everything, so picked apps switch between AI and the keyword guess. */
   fun setAiEnabled(db: BalanceDb, on: Boolean) {
@@ -318,6 +321,7 @@ internal object Ledger {
     } finally {
       sqlite.endTransaction()
     }
+    AiReview.kick(db.appContext)
   }
 
   /**
@@ -342,11 +346,16 @@ internal object Ledger {
   /** Points the ledger at [userId]'s file, on the writer thread so no write lands in the wrong one. */
   fun switchUser(context: Context, userId: String?) {
     val app = context.applicationContext
-    writer.submit { Account.switchTo(app, userId) }.get()
+    writer.submit {
+      // The old account's items must not stay on screen, nor be answered into the new ledger.
+      if (Account.userId(app) != userId) ReviewNotifier.cancelAll(app)
+      Account.switchTo(app, userId)
+    }.get()
     onChanged(app)
   }
 
   private fun onChanged(context: Context) {
+    runCatching { ReviewNotifier.syncOpen(context) }
     WidgetBridge.refresh(context)
     BalanceEvents.emitLedgerChanged()
   }

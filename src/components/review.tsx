@@ -26,9 +26,9 @@ function verdictOf(n: RawNotification): Verdict | null {
   return { kind: r.kind, direction: r.direction, amount: r.amount, counterparty: r.counterparty };
 }
 
-/** The AI's reading of one notification, with the three ways to answer it. */
-export function ReviewActions({ n }: { n: RawNotification }) {
-  const [fixing, setFixing] = useState(false);
+/** The AI's reading of one notification, with the three ways to answer it. `openFix` starts with the Fix sheet open. */
+export function ReviewActions({ n, openFix }: { n: RawNotification; openFix?: boolean }) {
+  const [fixing, setFixing] = useState(openFix ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const suggestion = verdictOf(n);

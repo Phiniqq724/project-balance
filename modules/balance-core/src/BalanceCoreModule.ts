@@ -27,15 +27,11 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   refreshWidgets(): Promise<void>;
   /** Turns AI review on or off and re-reads every notification. */
   setAiReview(on: boolean): Promise<void>;
-  aiSuggest(
-    rawId: number,
-    kind: AiKind,
-    direction: 'in' | 'out',
-    amount: number,
-    counterparty: string | null,
-    confidence: number
-  ): Promise<void>;
-  aiFailed(rawId: number): Promise<void>;
+  /** Queues a background pass over notifications waiting for AI. Cheap, safe to call often. */
+  runAiReview(): Promise<void>;
+  /** Hands the Supabase URL and publishable key to the native side, for background calls. */
+  setCloudConfig(url: string, key: string): void;
+  openNotificationSettings(): void;
   /** The user's answer; 'ad_or_other' = not a transaction. Anything else is logged as given. */
   aiResolve(rawId: number, kind: AiKind, direction: 'in' | 'out', amount: number, counterparty: string | null): Promise<void>;
   getAuthItem(key: string): string | null;

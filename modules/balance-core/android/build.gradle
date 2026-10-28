@@ -44,4 +44,6 @@ dependencies {
   implementation 'androidx.credentials:credentials:1.6.0'
   implementation 'androidx.credentials:credentials-play-services-auth:1.6.0'
   implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
+  // Background AI review. Same version expo-widgets pins, so the graph holds one copy.
+  implementation 'androidx.work:work-runtime-ktx:2.9.1'
 }

@@ -154,18 +154,24 @@ class BalanceCoreModule : Module() {
       Ledger.write(context) { db -> Ledger.reprocessAll(db) }
     }
 
-    // AI review (cloud mode). JS calls the edge function and hands results back here.
+    // AI review (cloud mode). The worker calls the edge function; JS only turns it on and answers.
     AsyncFunction("setAiReview") { on: Boolean ->
       Ledger.write(context) { db -> Ledger.setAiEnabled(db, on) }
     }
 
-    AsyncFunction("aiSuggest") { rawId: Long, kind: String, direction: String, amount: Long, counterparty: String?, confidence: Double ->
-      requireReview(kind, direction, amount)
-      Ledger.write(context) { db -> Ledger.suggest(db, rawId, kind, direction, amount, counterparty, confidence) }
+    // Reads pending notifications in the background (see AiReview). Safe to call often.
+    AsyncFunction("runAiReview") {
+      AiReview.kick(context)
     }
 
-    AsyncFunction("aiFailed") { rawId: Long ->
-      Ledger.write(context) { db -> Ledger.reviewFailed(db, rawId) }
+    // Lets background work call Supabase without the JS runtime.
+    Function("setCloudConfig") { url: String, key: String -> Account.setCloudConfig(context, url, key) }
+
+    Function("openNotificationSettings") {
+      val intent = Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(intent)
     }
 
     AsyncFunction("aiResolve") { rawId: Long, kind: String, direction: String, amount: Long, counterparty: String? ->

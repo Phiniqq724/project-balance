@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <!-- A receipt with a coin: something to check. -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M5,2h14v20l-2.33,-1.5L14.33,22L12,20.5L9.67,22L7.33,20.5L5,22V2zM8,7v2h8V7H8zM8,11v2h8v-2H8zM8,15v2h5v-2H8z" />
+</vector>
