@@ -52,7 +52,8 @@ export default function UnparsedScreen() {
             modifiers={[fillMaxSize()]}
             verticalArrangement={{ spacedBy: 10 }}
             contentPadding={{ start: space.page, end: space.page, top: 8, bottom: 32 }}>
-            <LazyColumn.Items data={state.data} keyExtractor={(n) => String(n.id)}>
+            {/* No recycling: a recycled row would hand one card's pressed state to the next item. */}
+            <LazyColumn.Items data={state.data} keyExtractor={(n) => String(n.id)} recycling={false}>
               {({ item }) => (
                 <Card n={item} icon={apps[item.source]?.icon ?? null} label={apps[item.source]?.label ?? sourceLabel(item.source)} cloud={cloud} />
               )}
