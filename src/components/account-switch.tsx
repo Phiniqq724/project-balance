@@ -4,9 +4,8 @@ import Mobile from '@expo/material-symbols/mobile.xml';
 import { Column } from '@expo/ui/jetpack-compose';
 import { fillMaxWidth, padding } from '@expo/ui/jetpack-compose/modifiers';
 import { useState } from 'react';
-import { Alert } from 'react-native';
 
-import { Label, SettingsDivider, SettingsRow } from '@/components/kit';
+import { ConfirmDialog, Label, SettingsDivider, SettingsRow } from '@/components/kit';
 import { signOut, switchToLocal } from '@/lib/auth';
 import { signInWithGoogle } from '@/lib/google';
 import { space } from '@/theme';
@@ -32,6 +31,7 @@ export function LocalHeader() {
 export function AccountSwitch({ cloud }: { cloud: boolean }) {
   const [state, setState] = useState<'idle' | 'running' | 'failed'>('idle');
   const [message, setMessage] = useState<string | null>(null);
+  const [asking, setAsking] = useState<'local' | 'signOut' | null>(null);
 
   const connect = async () => {
     if (state === 'running') return;
@@ -52,24 +52,31 @@ export function AccountSwitch({ cloud }: { cloud: boolean }) {
     }
   };
 
-  const confirm = () =>
-    Alert.alert('Use this phone only?', 'Backup and AI review stop. Your data stays here and in the cloud.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Stop syncing', onPress: () => void leave(switchToLocal) },
-    ]);
-
-  const confirmSignOut = () =>
-    Alert.alert('Sign out?', 'Your data stays backed up. Sign in again to get it back.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: () => void leave(signOut) },
-    ]);
-
   const status = state === 'running' ? 'Working…' : state === 'failed' ? (message ?? 'Failed') : undefined;
   return cloud ? (
     <>
-      <SettingsRow icon={Mobile} title="Use this phone only" status={status} statusTone="danger" onPress={confirm} />
+      <SettingsRow icon={Mobile} title="Use this phone only" status={status} statusTone="danger" onPress={() => setAsking('local')} />
       <SettingsDivider />
-      <SettingsRow icon={Logout} title="Sign out" tone="danger" onPress={confirmSignOut} />
+      <SettingsRow icon={Logout} title="Sign out" tone="danger" onPress={() => setAsking('signOut')} />
+      {asking === 'local' && (
+        <ConfirmDialog
+          title="Use this phone only?"
+          text="Backup and AI review stop. Your data stays here and in the cloud."
+          confirm="Stop syncing"
+          onConfirm={() => void leave(switchToLocal)}
+          onDismiss={() => setAsking(null)}
+        />
+      )}
+      {asking === 'signOut' && (
+        <ConfirmDialog
+          title="Sign out?"
+          text="Your data stays backed up. Sign in again to get it back."
+          confirm="Sign out"
+          danger
+          onConfirm={() => void leave(signOut)}
+          onDismiss={() => setAsking(null)}
+        />
+      )}
     </>
   ) : (
     <SettingsRow

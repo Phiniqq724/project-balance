@@ -1,5 +1,6 @@
 import ChevronRight from '@expo/material-symbols/chevron_right.xml';
 import {
+  AlertDialog,
   Box,
   Button,
   CircularProgressIndicator,
@@ -9,6 +10,7 @@ import {
   Icon,
   Row,
   Text,
+  TextButton,
   type TextProps,
 } from '@expo/ui/jetpack-compose';
 import {
@@ -184,5 +186,57 @@ export function SettingsRow({ title, onPress, icon, subtitle, tone = 'text', sta
           <Icon source={ChevronRight} size={22} tint={color.muted} />
         ))}
     </Row>
+  );
+}
+
+/** Two-button confirm in the app's colors. Confirm closes the dialog before running. */
+export function ConfirmDialog({
+  title,
+  text,
+  confirm,
+  danger,
+  onConfirm,
+  onDismiss,
+}: {
+  title: string;
+  text: string;
+  confirm: string;
+  danger?: boolean;
+  onConfirm: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <AlertDialog
+      onDismissRequest={onDismiss}
+      colors={{ containerColor: color.raised, titleContentColor: color.text, textContentColor: color.muted }}>
+      <AlertDialog.Title>
+        <Label size={20} weight="bold">
+          {title}
+        </Label>
+      </AlertDialog.Title>
+      <AlertDialog.Text>
+        <Label tone="muted" lineHeight={21}>
+          {text}
+        </Label>
+      </AlertDialog.Text>
+      <AlertDialog.ConfirmButton>
+        <TextButton
+          onClick={() => {
+            onDismiss();
+            onConfirm();
+          }}>
+          <Label weight="bold" tone={danger ? 'danger' : 'text'}>
+            {confirm}
+          </Label>
+        </TextButton>
+      </AlertDialog.ConfirmButton>
+      <AlertDialog.DismissButton>
+        <TextButton onClick={onDismiss}>
+          <Label weight="medium" tone="muted">
+            Cancel
+          </Label>
+        </TextButton>
+      </AlertDialog.DismissButton>
+    </AlertDialog>
   );
 }
