@@ -145,10 +145,10 @@ export function SheetSlot({ children }: { children?: ReactNode }) {
   return <Box>{children}</Box>;
 }
 
-/** Hairline between rows, inset to line up with the titles (16 padding + 22 icon + 14 gap). */
+/** Hairline between rows, inset by the row padding on both sides so it spans icon to chevron. */
 export function SettingsDivider() {
   return (
-    <Box modifiers={[fillMaxWidth(), padding(52, 0, 0, 0)]}>
+    <Box modifiers={[fillMaxWidth(), padding(16, 0, 16, 0)]}>
       <Rule />
     </Box>
   );
