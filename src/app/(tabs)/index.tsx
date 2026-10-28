@@ -18,7 +18,7 @@ import { useState } from 'react';
 
 import { FlowChart } from '../../../modules/balance-core/src/FlowChart';
 import { HeatLegend, Heatmap } from '@/components/heatmap';
-import { RefreshButton } from '@/components/refresh-button';
+import { PullToReread } from '@/components/pull-to-reread';
 import { Failed, Label, Loading, Money, Rule, Screen } from '@/components/kit';
 import { analyticsStart, analyze, PERIODS, type Analysis, type Period, type Share } from '@/lib/analytics';
 import { digits, rupiah, shortDate } from '@/lib/format';
@@ -58,82 +58,83 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
   const empty = data.flows.length === 0;
 
   return (
-    <Column modifiers={[fillMaxWidth(), verticalScroll()]}>
-      {!data.hasAccess && <AccessBanner />}
+    <PullToReread>
+      <Column modifiers={[fillMaxWidth(), verticalScroll()]}>
+        {!data.hasAccess && <AccessBanner />}
 
-      <Row horizontalArrangement="end" modifiers={[fillMaxWidth(), padding(0, 4, 8, 0)]}>
-        <RefreshButton />
-        <InboxBell count={data.unparsed} />
-      </Row>
+        <Row horizontalArrangement="end" modifiers={[fillMaxWidth(), padding(0, 4, 8, 0)]}>
+          <InboxBell count={data.unparsed} />
+        </Row>
 
-      <PeriodTicker period={period} onChange={onPeriod} range={rangeLabel(a)} />
+        <PeriodTicker period={period} onChange={onPeriod} range={rangeLabel(a)} />
 
-      <Column modifiers={[padding(space.page, 28, space.page, 0)]} verticalArrangement={{ spacedBy: 6 }}>
-        <Label size={13} weight="medium" tone="muted">
-          Spent
-        </Label>
-        <Money value={digits(a.spent)} size={46} />
-        <Pace delta={a.paceDelta} compare={meta.compare} />
+        <Column modifiers={[padding(space.page, 28, space.page, 0)]} verticalArrangement={{ spacedBy: 6 }}>
+          <Label size={13} weight="medium" tone="muted">
+            Spent
+          </Label>
+          <Money value={digits(a.spent)} size={46} />
+          <Pace delta={a.paceDelta} compare={meta.compare} />
+        </Column>
+
+        {empty ? (
+          <Label size={15} tone="muted" modifiers={[padding(space.page, 28, space.page, 0)]}>
+            Nothing logged yet. Pay with Jago or myBCA and it shows up here.
+          </Label>
+        ) : (
+          <>
+            <FlowChart
+              mode="line"
+              current={a.line.current}
+              previous={a.hasPrevious ? a.line.previous : []}
+              ticks={a.line.ticks}
+              readoutLabels={a.line.readoutLabels}
+              readoutValues={a.line.readoutValues}
+              defaultIndex={a.nowIndex}
+              textColor={color.text}
+              mutedColor={color.muted}
+              gridColor={color.line}
+              accentColor={color.accent}
+              modifiers={[fillMaxWidth(), height(224), padding(space.page, 24, space.page, 0)]}
+            />
+            <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
+              <LegendKey label={meta.current} />
+              {a.hasPrevious && <LegendKey label={meta.previous} dashed />}
+            </Row>
+
+            <SpendGrid columns={data.grid} />
+
+            <FlowSplit spent={a.spent} received={a.received} />
+
+            {a.categories.length > 0 && <WhereItWent categories={a.categories} payments={a.stats.payments} />}
+            {a.sources.length > 0 && <WhereItCameFrom sources={a.sources} />}
+
+            <SectionHead title={meta.unit} />
+            <FlowChart
+              mode="bars"
+              current={a.bars.spend}
+              income={a.bars.income}
+              ticks={a.line.ticks}
+              readoutLabels={a.bars.readoutLabels}
+              readoutValues={a.bars.readoutValues}
+              defaultIndex={a.nowIndex}
+              textColor={color.text}
+              mutedColor={color.muted}
+              gridColor={color.line}
+              accentColor={color.accent}
+              incomeColor={color.income}
+              modifiers={[fillMaxWidth(), height(184), padding(space.page, 0, space.page, 0)]}
+            />
+            <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
+              <LegendKey label="Spent" tint={color.accent} />
+              <LegendKey label="Received" tint={color.income} />
+            </Row>
+
+            <StatPlate a={a} />
+          </>
+        )}
+        <Spacer modifiers={[height(space.navClearance)]} />
       </Column>
-
-      {empty ? (
-        <Label size={15} tone="muted" modifiers={[padding(space.page, 28, space.page, 0)]}>
-          Nothing logged yet. Pay with Jago or myBCA and it shows up here.
-        </Label>
-      ) : (
-        <>
-          <FlowChart
-            mode="line"
-            current={a.line.current}
-            previous={a.hasPrevious ? a.line.previous : []}
-            ticks={a.line.ticks}
-            readoutLabels={a.line.readoutLabels}
-            readoutValues={a.line.readoutValues}
-            defaultIndex={a.nowIndex}
-            textColor={color.text}
-            mutedColor={color.muted}
-            gridColor={color.line}
-            accentColor={color.accent}
-            modifiers={[fillMaxWidth(), height(224), padding(space.page, 24, space.page, 0)]}
-          />
-          <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label={meta.current} />
-            {a.hasPrevious && <LegendKey label={meta.previous} dashed />}
-          </Row>
-
-          <SpendGrid columns={data.grid} />
-
-          <FlowSplit spent={a.spent} received={a.received} />
-
-          {a.categories.length > 0 && <WhereItWent categories={a.categories} payments={a.stats.payments} />}
-          {a.sources.length > 0 && <WhereItCameFrom sources={a.sources} />}
-
-          <SectionHead title={meta.unit} />
-          <FlowChart
-            mode="bars"
-            current={a.bars.spend}
-            income={a.bars.income}
-            ticks={a.line.ticks}
-            readoutLabels={a.bars.readoutLabels}
-            readoutValues={a.bars.readoutValues}
-            defaultIndex={a.nowIndex}
-            textColor={color.text}
-            mutedColor={color.muted}
-            gridColor={color.line}
-            accentColor={color.accent}
-            incomeColor={color.income}
-            modifiers={[fillMaxWidth(), height(184), padding(space.page, 0, space.page, 0)]}
-          />
-          <Row horizontalArrangement={{ spacedBy: 16 }} modifiers={[padding(space.page, 4, space.page, 0)]}>
-            <LegendKey label="Spent" tint={color.accent} />
-            <LegendKey label="Received" tint={color.income} />
-          </Row>
-
-          <StatPlate a={a} />
-        </>
-      )}
-      <Spacer modifiers={[height(space.navClearance)]} />
-    </Column>
+    </PullToReread>
   );
 }
 
