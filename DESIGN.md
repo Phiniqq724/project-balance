@@ -21,7 +21,7 @@ Dial: ENERGY 1 / RHYTHM 2 / MOTION 1
 | line | `#3A322C` | hairline rules, bar tracks |
 | text | `#F3EBE2` | primary text, the lead bar, selected states |
 | muted | `#AC9F92` | secondary text, "Rp" prefix |
-| accent | `#FF7444` | the spending heat grid. Nowhere else. |
+| accent | `#FF7444` | money out: heat grid, spend bars, out amounts, the chart's today dot, inbox badge |
 | income | `#9BCB9F` | money in: sage text, split bar, received series |
 | danger | `#F07AAE` | errors, "access off" |
 
