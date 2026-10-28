@@ -4,7 +4,7 @@ import { fillMaxWidth, padding } from '@expo/ui/jetpack-compose/modifiers';
 import { useState } from 'react';
 
 import { fieldColors, fieldText } from '@/components/category-sheet';
-import { ConfirmDialog, Label, SettingsDivider, SettingsRow } from '@/components/kit';
+import { ConfirmDialog, Label, SettingsDivider, SettingsRow, SheetSlot } from '@/components/kit';
 import { keyError, keyLabel, useAiKey } from '@/lib/ai-key';
 import { useCloudUser } from '@/lib/auth';
 import { BalanceCore } from '@/lib/ledger';
@@ -25,16 +25,18 @@ export function AiKeyRow() {
         onPress={() => setOpen(true)}
       />
       <SettingsDivider />
-      {open && (
-        <AiKeySheet
-          saved={info !== null}
-          onDone={() => {
-            refresh();
-            setOpen(false);
-          }}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      <SheetSlot>
+        {open && (
+          <AiKeySheet
+            saved={info !== null}
+            onDone={() => {
+              refresh();
+              setOpen(false);
+            }}
+            onClose={() => setOpen(false)}
+          />
+        )}
+      </SheetSlot>
     </>
   );
 }

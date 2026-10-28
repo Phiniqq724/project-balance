@@ -137,6 +137,14 @@ export function SettingsGroup({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * A fixed spot for a sheet or dialog that comes and goes. Mounting one straight into a list shifts
+ * every later sibling, and Expo UI rebuilds them, so their icons blink while they reload.
+ */
+export function SheetSlot({ children }: { children?: ReactNode }) {
+  return <Box>{children}</Box>;
+}
+
 /** Hairline between rows, inset to line up with the titles (16 padding + 22 icon + 14 gap). */
 export function SettingsDivider() {
   return (

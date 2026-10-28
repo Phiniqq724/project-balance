@@ -6,7 +6,7 @@ import { Directory, File } from 'expo-file-system';
 import { useState } from 'react';
 
 import type { LedgerImportPreview } from '../../modules/balance-core/src/BalanceCoreModule';
-import { Label, SettingsDivider, SettingsRow } from '@/components/kit';
+import { Label, SettingsDivider, SettingsRow, SheetSlot } from '@/components/kit';
 import { BalanceCore } from '@/lib/ledger';
 import { color, space } from '@/theme';
 
@@ -104,31 +104,33 @@ export function DataRows() {
         onPress={pickFile}
       />
 
-      {pending && (
-        <ModalBottomSheet onDismissRequest={() => setPending(null)} containerColor={color.surface} skipPartiallyExpanded>
-          <Column modifiers={[fillMaxWidth(), padding(space.page, 4, space.page, 32)]} verticalArrangement={{ spacedBy: 16 }}>
-            <Label size={22} weight="bold">
-              {summary(pending.preview)}
-            </Label>
-            {pending.preview.newCategories > 0 && (
-              <Label tone="muted">{`${pending.preview.newCategories} new categories`}</Label>
-            )}
-            {pending.preview.skipped > 0 && <Label tone="muted">{`${pending.preview.skipped} rows skipped`}</Label>}
-            <Row horizontalArrangement={{ spacedBy: 8 }} verticalAlignment="center">
-              <Button onClick={confirm} enabled={!busy && pending.preview.add + pending.preview.newCategories > 0}>
-                <Label weight="medium" color={color.bg}>
-                  Import
-                </Label>
-              </Button>
-              <TextButton onClick={() => setPending(null)}>
-                <Label weight="medium" tone="muted">
-                  Cancel
-                </Label>
-              </TextButton>
-            </Row>
-          </Column>
-        </ModalBottomSheet>
-      )}
+      <SheetSlot>
+        {pending && (
+          <ModalBottomSheet onDismissRequest={() => setPending(null)} containerColor={color.surface} skipPartiallyExpanded>
+            <Column modifiers={[fillMaxWidth(), padding(space.page, 4, space.page, 32)]} verticalArrangement={{ spacedBy: 16 }}>
+              <Label size={22} weight="bold">
+                {summary(pending.preview)}
+              </Label>
+              {pending.preview.newCategories > 0 && (
+                <Label tone="muted">{`${pending.preview.newCategories} new categories`}</Label>
+              )}
+              {pending.preview.skipped > 0 && <Label tone="muted">{`${pending.preview.skipped} rows skipped`}</Label>}
+              <Row horizontalArrangement={{ spacedBy: 8 }} verticalAlignment="center">
+                <Button onClick={confirm} enabled={!busy && pending.preview.add + pending.preview.newCategories > 0}>
+                  <Label weight="medium" color={color.bg}>
+                    Import
+                  </Label>
+                </Button>
+                <TextButton onClick={() => setPending(null)}>
+                  <Label weight="medium" tone="muted">
+                    Cancel
+                  </Label>
+                </TextButton>
+              </Row>
+            </Column>
+          </ModalBottomSheet>
+        )}
+      </SheetSlot>
     </>
   );
 }

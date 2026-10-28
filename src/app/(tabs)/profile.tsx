@@ -43,7 +43,7 @@ import { AiReviewRow } from '@/components/ai-review-row';
 import { DataRows } from '@/components/data-rows';
 import { ReviewAlertsRow } from '@/components/review-alerts-row';
 import { CategorySheet, fieldColors, fieldText } from '@/components/category-sheet';
-import { Chip, Failed, Label, Loading, Screen, SettingsGroup, SettingsRow } from '@/components/kit';
+import { Chip, Failed, Label, Loading, Screen, SettingsGroup, SettingsRow, SheetSlot } from '@/components/kit';
 import {
   BalanceCore,
   getCategories,
@@ -238,16 +238,18 @@ function Apps({ installed, initial }: { installed: InstalledApp[]; initial: stri
         </Label>
       )}
 
-      {picking && (
-        <AppPicker
-          apps={others}
-          onPick={(pkg) => {
-            setPicking(false);
-            save([...watched, pkg]);
-          }}
-          onClose={() => setPicking(false)}
-        />
-      )}
+      <SheetSlot>
+        {picking && (
+          <AppPicker
+            apps={others}
+            onPick={(pkg) => {
+              setPicking(false);
+              save([...watched, pkg]);
+            }}
+            onClose={() => setPicking(false)}
+          />
+        )}
+      </SheetSlot>
     </>
   );
 }
@@ -391,7 +393,7 @@ function Account() {
           Edit
         </Label>
       </Row>
-      {editing && <ProfileSheet email={email} onClose={() => setEditing(false)} />}
+      <SheetSlot>{editing && <ProfileSheet email={email} onClose={() => setEditing(false)} />}</SheetSlot>
     </>
   );
 }
