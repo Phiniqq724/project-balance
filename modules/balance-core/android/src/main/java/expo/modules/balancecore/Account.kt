@@ -17,6 +17,8 @@ internal object Account {
   private const val PREFS = "balance.account"
   private const val USER_ID = "user_id"
   private const val AUTH_PREFIX = "auth:"
+  private const val CLOUD_URL = "cloud_url"
+  private const val CLOUD_KEY = "cloud_key"
   private const val LEGACY_DB = "balance.db"
 
   private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -32,6 +34,15 @@ internal object Account {
   fun removeAuthItem(context: Context, key: String) {
     prefs(context).edit().remove(AUTH_PREFIX + key).commit()
   }
+
+  /** Supabase URL and publishable key, handed over by JS so background work can call the cloud. */
+  fun setCloudConfig(context: Context, url: String, key: String) {
+    prefs(context).edit().putString(CLOUD_URL, url.trimEnd('/')).putString(CLOUD_KEY, key).apply()
+  }
+
+  fun cloudUrl(context: Context): String? = prefs(context).getString(CLOUD_URL, null)
+
+  fun cloudKey(context: Context): String? = prefs(context).getString(CLOUD_KEY, null)
 
   /**
    * Only call from the ledger writer thread (see [Ledger.switchUser]).

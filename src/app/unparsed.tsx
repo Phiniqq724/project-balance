@@ -1,14 +1,14 @@
 import Back from '@expo/material-symbols/arrow_back.xml';
 import { Box, Column, Icon, Image, LazyColumn, Row } from '@expo/ui/jetpack-compose';
 import { background, clickable, clip, fillMaxSize, fillMaxWidth, padding, paddingAll, Shapes, size, weight } from '@expo/ui/jetpack-compose/modifiers';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 
 import { Failed, Label, Loading, Screen } from '@/components/kit';
 import { ReviewActions } from '@/components/review';
-import { useCloudUser } from '@/lib/auth';
 import { dayLabel, time } from '@/lib/format';
 import { BalanceCore, getUnparsed, sourceLabel, type RawNotification } from '@/lib/ledger';
+import { askOnce } from '@/lib/review-alerts';
 import { useLedger } from '@/lib/use-ledger';
 import { color, space } from '@/theme';
 
@@ -25,8 +25,15 @@ function useApps() {
 
 export default function UnparsedScreen() {
   const state = useLedger(getUnparsed);
-  const cloud = !!useCloudUser();
   const apps = useApps();
+  const { fix } = useLocalSearchParams<{ fix?: string }>();
+  const fixId = fix ? Number(fix) : null;
+  const hasItems = state.status === 'ready' && state.data.length > 0;
+
+  // The first time there is something to check, ask once to be allowed to tell them about the next ones.
+  useEffect(() => {
+    if (hasItems) askOnce().catch(() => {});
+  }, [hasItems]);
 
   return (
     <Screen>
@@ -53,9 +60,14 @@ export default function UnparsedScreen() {
             verticalArrangement={{ spacedBy: 10 }}
             contentPadding={{ start: space.page, end: space.page, top: 8, bottom: 32 }}>
             {/* No recycling: a recycled row would hand one card's pressed state to the next item. */}
-            <LazyColumn.Items data={state.data} keyExtractor={(n) => String(n.id)} recycling={false}>
+            <LazyColumn.Items data={fixId ? [...state.data].sort((a, b) => Number(b.id === fixId) - Number(a.id === fixId)) : state.data} keyExtractor={(n) => String(n.id)} recycling={false}>
               {({ item }) => (
-                <Card n={item} icon={apps[item.source]?.icon ?? null} label={apps[item.source]?.label ?? sourceLabel(item.source)} cloud={cloud} />
+                <Card
+                  n={item}
+                  icon={apps[item.source]?.icon ?? null}
+                  label={apps[item.source]?.label ?? sourceLabel(item.source)}
+                  fixing={item.id === fixId}
+                />
               )}
             </LazyColumn.Items>
           </LazyColumn>
@@ -65,10 +77,10 @@ export default function UnparsedScreen() {
   );
 }
 
-function Card({ n, icon, label, cloud }: { n: RawNotification; icon: string | null; label: string; cloud: boolean }) {
+function Card({ n, icon, label, fixing }: { n: RawNotification; icon: string | null; label: string; fixing: boolean }) {
   return (
     <Column
-      modifiers={[fillMaxWidth(), clip(Shapes.RoundedCorner(16)), background(color.surface), paddingAll(16)]}
+      modifiers={[fillMaxWidth(), clip(Shapes.RoundedCorner(16)), background(fixing ? color.raised : color.surface), paddingAll(16)]}
       verticalArrangement={{ spacedBy: 12 }}>
       <Row verticalAlignment="center" horizontalArrangement={{ spacedBy: 10 }} modifiers={[fillMaxWidth()]}>
         <AppIcon uri={icon} label={label} />
@@ -85,7 +97,7 @@ function Card({ n, icon, label, cloud }: { n: RawNotification; icon: string | nu
           {n.body}
         </Label>
       </Column>
-      {cloud && n.review && <ReviewActions n={n} />}
+      <ReviewActions n={n} openFix={fixing} />
     </Column>
   );
 }

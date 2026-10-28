@@ -11,18 +11,20 @@ const storage: SupportedStorage = {
   removeItem: (key) => BalanceCore.removeAuthItem(key),
 };
 
-export const supabase = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL!,
-  process.env.EXPO_PUBLIC_SUPABASE_KEY!,
-  {
-    auth: {
-      storage,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const key = process.env.EXPO_PUBLIC_SUPABASE_KEY!;
+
+// Background AI review runs natively and needs to reach the project without JS.
+BalanceCore.setCloudConfig(url, key);
+
+export const supabase = createClient(url, key, {
+  auth: {
+    storage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
   },
-);
+});
 
 AppState.addEventListener('change', (state) => {
   if (state === 'active') {

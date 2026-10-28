@@ -7,7 +7,12 @@
     </intent>
   </queries>
 
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
   <application>
+    <receiver
+      android:name="expo.modules.balancecore.ReviewActionReceiver"
+      android:exported="false" />
     <service
       android:name="expo.modules.balancecore.BalanceListenerService"
       android:label="@string/balance_listener_label"

@@ -14,6 +14,7 @@ import java.util.UUID
  */
 internal class BalanceDb private constructor(context: Context, val name: String) :
   SQLiteOpenHelper(context.applicationContext, name, null, 3) {
+  val appContext: Context = context.applicationContext
 
   override fun onConfigure(db: SQLiteDatabase) {
     db.setForeignKeyConstraintsEnabled(true)
@@ -228,6 +229,8 @@ internal object Settings {
   const val WATCHED_PACKAGES = "watched_packages"
   // "1" = send money-looking notifications no rule understood to the classify-notification function.
   const val AI_REVIEW = "ai_review"
+  // "0" = no notifications for items that need an answer; anything else (or unset) = on.
+  const val REVIEW_ALERTS = "review_alerts"
 
   val DEFAULT_PACKAGES = listOf(
     "com.jago.digitalBanking",

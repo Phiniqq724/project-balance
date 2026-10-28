@@ -50,6 +50,8 @@ export type Review = {
 export const SETTINGS = {
   watchedPackages: 'watched_packages',
   aiReview: 'ai_review',
+  reviewAlerts: 'review_alerts',
+  alertsAsked: 'review_alerts_asked',
 } as const;
 
 /** Watched out of the box: the banks the parsers were written against. */

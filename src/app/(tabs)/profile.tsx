@@ -40,6 +40,7 @@ import type { InstalledApp } from '../../../modules/balance-core/src/BalanceCore
 import { AccountSwitch, LocalHeader } from '@/components/account-switch';
 import { AiReviewRow } from '@/components/ai-review-row';
 import { DataRows } from '@/components/data-rows';
+import { ReviewAlertsRow } from '@/components/review-alerts-row';
 import { CategorySheet, fieldColors, fieldText } from '@/components/category-sheet';
 import { Chip, Failed, Label, Loading, Screen, SettingsGroup, SettingsRow } from '@/components/kit';
 import {
@@ -111,6 +112,7 @@ function ProfileBody({ data }: { data: Data }) {
         <Head title="Reading" />
         <SettingsGroup>
           {signedIn && <AiReviewRow />}
+          <ReviewAlertsRow />
           <Reprocess />
         </SettingsGroup>
 
