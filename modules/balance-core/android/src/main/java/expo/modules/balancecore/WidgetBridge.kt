@@ -26,6 +26,9 @@ internal object WidgetBridge {
   private const val GAP_RATIO = 0.25f
   private val HEAT = intArrayOf(0xFF2B2420.toInt(), 0xFF5C2D1C.toInt(), 0xFF93401F.toInt(), 0xFFD2582B.toInt(), 0xFFFF7444.toInt())
 
+  /** Narrower than this (dp), the grid widget drops to the short "today" header. */
+  private const val COMPACT_WIDTH = 250
+
   @Synchronized
   fun refresh(context: Context) {
     val app = context.applicationContext
@@ -52,10 +55,13 @@ internal object WidgetBridge {
   }
 
   private fun spendGridProps(context: Context, db: BalanceDb): JSONObject {
-    val (widthDp, heightDp) = gridArea(context)
+    val (widgetWidth, widgetHeight) = widgetSize(context)
+    // Matches the layout in src/widgets/spend-grid.tsx: 14dp padding, ~20dp header, 8dp gap.
+    val widthDp = (widgetWidth - 28f).coerceAtLeast(40f)
+    val heightDp = (widgetHeight - 28f - 28f).coerceAtLeast(40f)
     // Seven rows fill the height; as many week columns as fit the width.
     val unit = heightDp / (7 + 6 * GAP_RATIO)
-    val weeks = ((widthDp + unit * GAP_RATIO) / (unit * (1 + GAP_RATIO))).toInt().coerceIn(4, 53)
+    val weeks = ((widthDp + unit * GAP_RATIO) / (unit * (1 + GAP_RATIO))).toInt().coerceIn(2, 53)
 
     val today = startOfDay(Calendar.getInstance())
     // Columns are Monday-first weeks; the last column holds the current week.
@@ -78,22 +84,22 @@ internal object WidgetBridge {
       .put("grid", Uri.fromFile(file).toString())
       .put("total", compact(values.sum()))
       .put("today", compact(values[todayIndex]))
+      .put("compact", widgetWidth < COMPACT_WIDTH)
   }
 
   /**
-   * The grid's space inside the first placed SpendGrid widget, in dp. The JS layout can't see
-   * the widget size and Glance caps rows at 10 children, so the grid is drawn here as one bitmap.
+   * The first placed SpendGrid widget's size, in dp. The JS layout can't see it and Glance caps
+   * rows at 10 children, so the grid is drawn here as one bitmap sized to fit.
    */
-  private fun gridArea(context: Context): Pair<Float, Float> {
+  private fun widgetSize(context: Context): Pair<Int, Int> {
     val manager = AppWidgetManager.getInstance(context)
     val component = ComponentName(context.packageName, "${context.packageName}.SpendGridProvider")
     val id = runCatching { manager.getAppWidgetIds(component) }.getOrNull()?.firstOrNull()
     val options = id?.let { manager.getAppWidgetOptions(it) }
-    // Portrait size is min width x max height.
-    val width = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)?.takeIf { it > 0 } ?: 300
+    // Portrait size is min width x max height. Unplaced, draw for the 2x2 it's added at.
+    val width = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)?.takeIf { it > 0 } ?: 150
     val height = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)?.takeIf { it > 0 } ?: 150
-    // Matches the layout in src/widgets/spend-grid.tsx: 14dp padding, ~20dp header, 8dp gap.
-    return (width - 28f).coerceAtLeast(80f) to (height - 28f - 28f).coerceAtLeast(40f)
+    return width to height
   }
 
   private fun drawGrid(context: Context, weeks: Int, levels: List<Int>, unitDp: Float): File {

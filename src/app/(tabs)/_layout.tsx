@@ -13,9 +13,8 @@ import { background, clickable, clip, fillMaxWidth, matchParentSize, padding, Sh
 import Activity from '@expo/material-symbols/receipt_long.xml';
 import Overview from '@expo/material-symbols/monitoring.xml';
 import Person from '@expo/material-symbols/person.xml';
-import { router, type Href } from 'expo-router';
-import { TopTabs, type MaterialTopTabBarProps } from 'expo-router/js-top-tabs';
-import { useEffect, useState } from 'react';
+import { router, usePathname, type Href } from 'expo-router';
+import { TopTabs } from 'expo-router/js-top-tabs';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -27,19 +26,18 @@ const TABS = [
   { name: 'profile', href: '/profile', label: 'Profile', icon: Person },
 ] as const;
 
-// Swipeable pages like manage-kontrakan: the floating pill replaces the pager's own tab bar.
+// Swipeable pages like manage-kontrakan. The pager draws no bar of its own; the floating pill sits
+// over it and only follows the route, so nothing runs on the JS thread while a swipe is in flight.
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>
-      <TopTabs
-        tabBarPosition="bottom"
-        tabBar={(props) => <FloatingBar {...props} bottom={insets.bottom + 4} />}
-        screenOptions={{ sceneStyle: { backgroundColor: color.bg } }}>
+      <TopTabs tabBarPosition="bottom" tabBar={() => null} screenOptions={{ sceneStyle: { backgroundColor: color.bg } }}>
         {TABS.map((tab) => (
           <TopTabs.Screen key={tab.name} name={tab.name} options={{ title: tab.label }} />
         ))}
       </TopTabs>
+      <FloatingBar bottom={insets.bottom + 4} />
       {/* Solid strip behind the gesture bar so pages never show through it. */}
       <View
         pointerEvents="none"
@@ -50,30 +48,9 @@ export default function TabsLayout() {
 }
 
 /** Same pill as manage-kontrakan: icons only, the open tab expands to show its label. */
-function FloatingBar({ bottom, state, position }: MaterialTopTabBarProps & { bottom: number }) {
-  // Follows the pager's live position so the pill flips mid-swipe, not after the page settles
-  // and the route catches up.
-  const [index, setIndex] = useState(state.index);
-  const [routeIndex, setRouteIndex] = useState(state.index);
-  // Tab tapped: ignore the positions the pager slides through on the way there.
-  const [target, setTarget] = useState<number | null>(null);
-
-  // Route changed (swipe settled, deep link, back): snap to it.
-  if (state.index !== routeIndex) {
-    setRouteIndex(state.index);
-    setIndex(state.index);
-    // A swipe that interrupted a tap's slide landed elsewhere: stop waiting for the tapped page.
-    if (target !== null && target !== state.index) setTarget(null);
-  }
-
-  useEffect(() => {
-    const id = position.addListener(({ value }) => {
-      const next = Math.round(value);
-      if (target === null) setIndex(next);
-      else if (next === target) setTarget(null);
-    });
-    return () => position.removeListener(id);
-  }, [position, target]);
+function FloatingBar({ bottom }: { bottom: number }) {
+  const pathname = usePathname();
+  const index = Math.max(0, TABS.findIndex((tab) => tab.href === pathname));
 
   return (
     <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom, alignItems: 'center' }}>
@@ -92,10 +69,7 @@ function FloatingBar({ bottom, state, position }: MaterialTopTabBarProps & { bot
                       clip(Shapes.RoundedCorner(20)),
                       background(focused ? color.selected : 'transparent'),
                       clickable(() => {
-                        if (focused) return;
-                        setTarget(i);
-                        setIndex(i);
-                        router.navigate(tab.href as Href);
+                        if (!focused) router.navigate(tab.href as Href);
                       }),
                     ]}
                   />

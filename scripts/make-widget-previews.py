@@ -32,14 +32,13 @@ def text(draw, x, y, value, weight, size, fill):
     return x + draw.textlength(value, font=f) / S
 
 
-def spend_grid():
-    w, h, pad, gap_ratio = 300, 150, 14, 0.25
+def spend_grid(w, h, pad, header, name, draw_header):
+    gap_ratio = 0.25
     img, draw = canvas(w, h)
-    x = text(draw, pad, pad, '2.84M', 'Bold', 15, TEXT)
-    text(draw, x, pad + 2, ' in 19 weeks  ·  45K today', 'Regular', 13, MUTED)
+    draw_header(draw, pad)
 
     # Same sizing as WidgetBridge.gridArea / spendGridProps.
-    area_w, area_h = w - 2 * pad, h - 2 * pad - 28
+    area_w, area_h = w - 2 * pad, h - 2 * pad - header
     unit = area_h / (7 + 6 * gap_ratio)
     weeks = int((area_w + unit * gap_ratio) / (unit * (1 + gap_ratio)))
     gap = unit * gap_ratio
@@ -54,7 +53,17 @@ def spend_grid():
         draw.rounded_rectangle(
             (cx * S, cy * S, (cx + unit) * S, (cy + unit) * S), radius=unit * 0.22 * S, fill=HEAT[level]
         )
-    img.save(f'{out}/spend_grid.png')
+    img.save(f'{out}/{name}.png')
+
+
+def big_header(draw, pad):
+    x = text(draw, pad, pad, '2.84M', 'Bold', 15, TEXT)
+    text(draw, x, pad + 2, ' in 19 weeks  ·  45K today', 'Regular', 13, MUTED)
+
+
+def small_header(draw, pad):
+    x = text(draw, pad, pad, '45K', 'Bold', 15, TEXT)
+    text(draw, x, pad + 2, ' today', 'Regular', 13, MUTED)
 
 
 def month_pulse():
@@ -73,5 +82,6 @@ def month_pulse():
     img.save(f'{out}/month_pulse.png')
 
 
-spend_grid()
+# The picker shows the 2x2 it's added at; stretched wide it switches to big_header.
+spend_grid(150, 150, 14, 28, 'spend_grid', small_header)
 month_pulse()

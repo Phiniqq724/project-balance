@@ -8,6 +8,8 @@ export type SpendGridProps = {
   grid: string;
   total: string;
   today: string;
+  /** Under ~4 cells wide (WidgetBridge.kt decides): just today's spend in the header. */
+  compact: boolean;
 };
 
 // Props come from the native listener (WidgetBridge.kt), so the widget updates with the app closed.
@@ -20,10 +22,10 @@ const SpendGrid = (props: SpendGridProps) => {
       <Column modifiers={[fillMaxSize(), paddingAll(14)]}>
         <Row>
           <Text color="#F3EBE2" style={{ fontSize: 15, fontWeight: '700' }}>
-            {props.total}
+            {props.compact ? props.today : props.total}
           </Text>
           <Text color="#AC9F92" style={{ fontSize: 13 }}>
-            {` in ${props.weeks} weeks  ·  ${props.today} today`}
+            {props.compact ? ' today' : ` in ${props.weeks} weeks  ·  ${props.today} today`}
           </Text>
         </Row>
         <Spacer modifiers={[height(8)]} />
@@ -36,7 +38,7 @@ const SpendGrid = (props: SpendGridProps) => {
           />
         ) : (
           <Text color="#AC9F92" style={{ fontSize: 13 }}>
-            Open Balance once to draw the grid.
+            {props.compact ? 'Open Balance once.' : 'Open Balance once to draw the grid.'}
           </Text>
         )}
       </Column>
@@ -49,4 +51,5 @@ export default createWidget<SpendGridProps>('SpendGrid', SpendGrid, {
   grid: '',
   total: '0',
   today: '0',
+  compact: true,
 });

@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
+import { useAutoUpdateCheck } from '@/lib/app-update';
 import { AuthProvider, useAccount } from '@/lib/auth';
 import { BalanceCore } from '@/lib/ledger';
 import { applyParseRules } from '@/lib/parse-rules';
@@ -16,6 +17,8 @@ import '@/widgets/spend-grid';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
+  useAutoUpdateCheck();
+
   // Widgets can't tell the app they were resized, so redraw them whenever the app is opened.
   useEffect(() => {
     BalanceCore.refreshWidgets().catch(() => {});
@@ -53,7 +56,6 @@ function Routes() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }}>
       <Stack.Protected guard={account?.mode !== 'none'}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="unparsed" />
       </Stack.Protected>
       <Stack.Protected guard={account?.mode === 'none'}>
         <Stack.Screen name="sign-in" />

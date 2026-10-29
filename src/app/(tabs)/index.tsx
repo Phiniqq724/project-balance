@@ -1,4 +1,4 @@
-import { Box, Button, Column, Icon, Row, Spacer, Text } from '@expo/ui/jetpack-compose';
+import { Box, Button, Column, Row, Spacer, Text } from '@expo/ui/jetpack-compose';
 import {
   background,
   clickable,
@@ -12,7 +12,6 @@ import {
   weight,
   width,
 } from '@expo/ui/jetpack-compose/modifiers';
-import Bell from '@expo/material-symbols/notifications.xml';
 import { router } from 'expo-router';
 import { useState } from 'react';
 
@@ -23,7 +22,7 @@ import { Failed, Label, Loading, Money, Rule, Screen } from '@/components/kit';
 import { analyticsStart, analyze, PERIODS, type Analysis, type Period, type Share } from '@/lib/analytics';
 import { digits, rupiah, shortDate } from '@/lib/format';
 import { buildHeatmap, heatmapStart } from '@/lib/heatmap';
-import { BalanceCore, getFlows, getUnparsedCount } from '@/lib/ledger';
+import { BalanceCore, getFlows } from '@/lib/ledger';
 import { useLedger } from '@/lib/use-ledger';
 import { color, font, space } from '@/theme';
 
@@ -32,9 +31,9 @@ const WEEKS = 20;
 async function loadOverview() {
   const now = new Date();
   const since = new Date(Math.min(analyticsStart(now).getTime(), heatmapStart(WEEKS, now).getTime()));
-  const [flows, unparsed] = await Promise.all([getFlows(since), getUnparsedCount()]);
+  const flows = await getFlows(since);
   const spend = flows.filter((f) => f.direction === 'out');
-  return { now, flows, grid: buildHeatmap(spend, WEEKS, now), unparsed, hasAccess: BalanceCore.hasNotificationAccess() };
+  return { now, flows, grid: buildHeatmap(spend, WEEKS, now), hasAccess: BalanceCore.hasNotificationAccess() };
 }
 
 type Data = Awaited<ReturnType<typeof loadOverview>>;
@@ -61,10 +60,6 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
     <PullToReread>
       <Column modifiers={[fillMaxWidth(), verticalScroll()]}>
         {!data.hasAccess && <AccessBanner />}
-
-        <Row horizontalArrangement="end" modifiers={[fillMaxWidth(), padding(0, 4, 8, 0)]}>
-          <InboxBell count={data.unparsed} />
-        </Row>
 
         <PeriodTicker period={period} onChange={onPeriod} range={rangeLabel(a)} />
 
@@ -170,28 +165,10 @@ function rangeLabel(a: Analysis) {
   return `${shortDate(first).slice(4)} – ${shortDate(last).slice(4)}`;
 }
 
-/** Bell at the top right; the badge counts notifications no rule understood. */
-function InboxBell({ count }: { count: number }) {
-  return (
-    <Box modifiers={[size(48, 48), clip(Shapes.Circle), clickable(() => router.push('/unparsed'))]} contentAlignment="center">
-      <Icon source={Bell} size={24} tint={color.text} contentDescription="Inbox" />
-      {count > 0 && (
-        <Box modifiers={[size(48, 48), padding(24, 6, 0, 0)]}>
-          <Box modifiers={[height(16), clip(Shapes.RoundedCorner(8)), background(color.accent)]} contentAlignment="center">
-            <Label size={10} weight="bold" color={color.bg} modifiers={[padding(count > 9 ? 4 : 5, 0, count > 9 ? 4 : 5, 0)]}>
-              {count > 99 ? '99+' : String(count)}
-            </Label>
-          </Box>
-        </Box>
-      )}
-    </Box>
-  );
-}
-
 /** Text tabs, no pills: the selected period is bright and underlined, the rest recede. */
 function PeriodTicker({ period, onChange, range }: { period: Period; onChange: (p: Period) => void; range: string }) {
   return (
-    <Row verticalAlignment="center" modifiers={[fillMaxWidth(), padding(space.page - 8, 4, space.page, 0)]}>
+    <Row verticalAlignment="center" modifiers={[fillMaxWidth(), padding(space.page - 8, 20, space.page, 0)]}>
       {PERIODS.map((p) => {
         const on = p.value === period;
         return (

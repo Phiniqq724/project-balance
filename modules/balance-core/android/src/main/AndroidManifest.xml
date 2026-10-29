@@ -13,6 +13,13 @@
     <receiver
       android:name="expo.modules.balancecore.ReviewActionReceiver"
       android:exported="false" />
+    <receiver
+      android:name="expo.modules.balancecore.WidgetResizedReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="expo.modules.widgets.ACTION_WIDGET_RESIZED" />
+      </intent-filter>
+    </receiver>
     <service
       android:name="expo.modules.balancecore.BalanceListenerService"
       android:label="@string/balance_listener_label"

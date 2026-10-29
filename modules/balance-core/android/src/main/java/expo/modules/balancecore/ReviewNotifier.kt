@@ -143,10 +143,10 @@ internal object ReviewNotifier {
       .setAutoCancel(true)
       .setOnlyAlertOnce(true)
       .setGroup(GROUP)
-      .setContentIntent(open(context, "projectbalance://unparsed", id * 4))
+      .setContentIntent(open(context, "projectbalance://activity?f=review", id * 4))
     if (item.suggestion && item.kind != "ad_or_other") builder.addAction(0, "Yes", answer(context, ACTION_YES, item.rawId, id * 4 + 1))
     builder.addAction(0, "Not money", answer(context, ACTION_NOT_MONEY, item.rawId, id * 4 + 2))
-    builder.addAction(0, "Fix", open(context, "projectbalance://unparsed?fix=${item.rawId}", id * 4 + 3))
+    builder.addAction(0, "Fix", open(context, "projectbalance://activity?f=review&fix=${item.rawId}", id * 4 + 3))
 
     try {
       NotificationManagerCompat.from(context).notify(id, builder.build())
@@ -172,7 +172,7 @@ internal object ReviewNotifier {
       .setGroupSummary(true)
       .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
       .setAutoCancel(true)
-      .setContentIntent(open(context, "projectbalance://unparsed", SUMMARY_ID))
+      .setContentIntent(open(context, "projectbalance://activity?f=review", SUMMARY_ID))
       .build()
     try {
       manager.notify(SUMMARY_ID, summary)
@@ -195,7 +195,7 @@ internal object ReviewNotifier {
 
   private fun rupiah(value: Long): String = "Rp " + String.format(Locale.US, "%,d", value).replace(',', '.')
 
-  /** Same wording as the inbox card. */
+  /** Same wording as the card in Activity. */
   private fun question(item: Item): String {
     val amount = rupiah(item.amount ?: 0)
     val who = item.counterparty?.takeIf { it.isNotBlank() }

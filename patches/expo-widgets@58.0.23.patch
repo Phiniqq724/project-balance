@@ -1,3 +1,45 @@
+diff --git a/node_modules/expo-widgets/.bun-tag-875109de4eddb394 b/.bun-tag-875109de4eddb394
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/android/src/main/java/expo/modules/widgets/ExpoWidgetsAppWidgetProvider.kt b/android/src/main/java/expo/modules/widgets/ExpoWidgetsAppWidgetProvider.kt
+index 84c025ff457c29bbdcf6c3f4752cfd5e2238d28c..1374514b0fc1fcb176508d49e579e410bbd8b137 100644
+--- a/android/src/main/java/expo/modules/widgets/ExpoWidgetsAppWidgetProvider.kt
++++ b/android/src/main/java/expo/modules/widgets/ExpoWidgetsAppWidgetProvider.kt
+@@ -1,12 +1,14 @@
+ package expo.modules.widgets
+ 
++import android.appwidget.AppWidgetManager
+ import android.content.Context
+ import android.content.Intent
++import android.os.Bundle
+ import androidx.glance.appwidget.GlanceAppWidgetReceiver
+ import io.github.expo.peek.emittables.PeekEmittableAppWidget
+ 
+ open class ExpoWidgetsAppWidgetProvider(
+-  widgetName: String
++  private val widgetName: String
+ ) : GlanceAppWidgetReceiver() {
+   override val glanceAppWidget: PeekEmittableAppWidget = ExpoWidgetsPeekWidget(widgetName)
+ 
+@@ -20,4 +22,18 @@ open class ExpoWidgetsAppWidgetProvider(
+ 
+     super.onReceive(context, intent)
+   }
++
++  // project-balance patch: tell the app a widget was resized, so it can redraw content sized to the
++  // widget (Balance's spending grid is a bitmap drawn for one size).
++  override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, appWidgetId: Int, newOptions: Bundle) {
++    super.onAppWidgetOptionsChanged(context, manager, appWidgetId, newOptions)
++    context.sendBroadcast(
++      Intent(WIDGET_RESIZED_ACTION)
++        .setPackage(context.packageName)
++        .putExtra(WIDGET_RESIZED_NAME_EXTRA, widgetName)
++    )
++  }
+ }
++
++const val WIDGET_RESIZED_ACTION = "expo.modules.widgets.ACTION_WIDGET_RESIZED"
++const val WIDGET_RESIZED_NAME_EXTRA = "widgetName"
 diff --git a/android/src/main/java/expo/modules/widgets/WidgetInteractionAction.kt b/android/src/main/java/expo/modules/widgets/WidgetInteractionAction.kt
 index b0b6479c2292763fd18eaee78b5e8d2dc4234493..d163524e11eeee5e0f844c2ee6d11eaf1322fded 100644
 --- a/android/src/main/java/expo/modules/widgets/WidgetInteractionAction.kt

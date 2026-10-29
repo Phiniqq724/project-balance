@@ -41,6 +41,7 @@ import { AccountSwitch, LocalHeader } from '@/components/account-switch';
 import { AiKeyRow } from '@/components/ai-key-row';
 import { AiReviewRow } from '@/components/ai-review-row';
 import { DataRows } from '@/components/data-rows';
+import { UpdateRow } from '@/components/update-row';
 import { ReviewAlertsRow } from '@/components/review-alerts-row';
 import { CategorySheet, fieldColors, fieldText } from '@/components/category-sheet';
 import { Chip, Failed, Label, Loading, Screen, SettingsGroup, SettingsRow, SheetSlot } from '@/components/kit';
@@ -121,6 +122,11 @@ function ProfileBody({ data }: { data: Data }) {
         <Head title="Data" />
         <SettingsGroup>
           <DataRows />
+        </SettingsGroup>
+
+        <Head title="App" />
+        <SettingsGroup>
+          <UpdateRow />
         </SettingsGroup>
 
         <Head title="Account" />
