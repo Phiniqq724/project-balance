@@ -56,7 +56,7 @@ function matches(tx: Transaction, f: string) {
   return true;
 }
 
-/** Name, category or amount; "25000" and "25.000" both find Rp 25.000. */
+/** Name, category, amount or app; "25000" and "25.000" both find Rp 25.000. */
 function found(q: string, ...fields: (string | number | null)[]) {
   if (!q) return true;
   const number = q.replace(/[.,]/g, '');
@@ -118,14 +118,17 @@ export default function ActivityScreen() {
 
   const { transactions, categories, unparsed } = state.data;
   const q = query.trim().toLowerCase();
+  const appName = (source: string) => apps[source]?.label ?? sourceLabel(source);
   const visible = reviewing
     ? []
     : transactions.filter(
-        (t) => matches(t, filter) && found(q, transactionTitle(t), t.categoryName, t.bankCategory, t.amount)
+        (t) =>
+          matches(t, filter) &&
+          found(q, transactionTitle(t), t.categoryName, t.bankCategory, t.amount, appName(t.source))
       );
   const notes = reviewing
     ? unparsed
-        .filter((n) => found(q, n.title, n.body, apps[n.source]?.label ?? sourceLabel(n.source)))
+        .filter((n) => found(q, n.title, n.body, appName(n.source)))
         // A "Fix" tap from a review alert puts that card first.
         .sort((a, b) => Number(b.id === fixId) - Number(a.id === fixId))
     : [];

@@ -36,9 +36,12 @@ class BalanceCoreModule : Module() {
       BalanceEvents.listener = null
     }
 
+    OnActivityEntersForeground {
+      appContext.reactContext?.let(BalanceListenerService::ensureBound)
+    }
+
     Function("hasNotificationAccess") {
-      val enabled = AndroidSettings.Secure.getString(context.contentResolver, "enabled_notification_listeners").orEmpty()
-      enabled.split(':').mapNotNull(ComponentName::unflattenFromString).any { it.packageName == context.packageName }
+      BalanceListenerService.hasAccess(context)
     }
 
     Function("openNotificationAccessSettings") {
