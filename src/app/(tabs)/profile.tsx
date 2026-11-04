@@ -2,7 +2,6 @@ import Add from '@expo/material-symbols/add.xml';
 import Edit from '@expo/material-symbols/edit.xml';
 import Check from '@expo/material-symbols/check.xml';
 import NotificationsOff from '@expo/material-symbols/notifications_off.xml';
-import RefreshIcon from '@expo/material-symbols/refresh.xml';
 import {
   Box,
   Button,
@@ -59,6 +58,7 @@ import { useCloudUser, useUser } from '@/lib/auth';
 import { changeAvatar, removeAvatar, saveUsername, useProfile } from '@/lib/profile';
 import { syncNow, useSyncStatus } from '@/lib/sync';
 import { useLedger } from '@/lib/use-ledger';
+import { PullToRefresh } from '@/components/pull-to-refresh';
 import { color, space } from '@/theme';
 
 async function loadSettings() {
@@ -89,7 +89,8 @@ function ProfileBody({ data }: { data: Data }) {
 
   return (
     <>
-      <Column modifiers={[fillMaxWidth(), verticalScroll()]}>
+      <PullToRefresh>
+        <Column modifiers={[fillMaxWidth(), verticalScroll()]}>
         <Label size={28} weight="bold" modifiers={[padding(space.page, 28, space.page, 20)]}>
           Profile
         </Label>
@@ -120,7 +121,6 @@ function ProfileBody({ data }: { data: Data }) {
 
         <Head title="Data" />
         <SettingsGroup>
-          {signedIn && <Refresh />}
           <DataRows />
         </SettingsGroup>
 
@@ -135,7 +135,8 @@ function ProfileBody({ data }: { data: Data }) {
         </SettingsGroup>
 
         <Spacer modifiers={[height(space.navClearance)]} />
-      </Column>
+        </Column>
+      </PullToRefresh>
 
       {editing && (
         <CategorySheet
@@ -337,25 +338,6 @@ function AppPicker({ apps, onPick, onClose }: { apps: InstalledApp[]; onPick: (p
         ))}
       </Column>
     </ModalBottomSheet>
-  );
-}
-
-/** Syncs with the account now. Notifications aren't read again. */
-function Refresh() {
-  const user = useUser();
-  const sync = useSyncStatus();
-  const text = sync.state === 'syncing' ? 'Syncing…' : sync.state === 'failed' ? 'Failed' : undefined;
-  return (
-    <SettingsRow
-      icon={RefreshIcon}
-      title="Refresh"
-      subtitle="Sync with your account"
-      status={text}
-      statusTone={sync.state === 'failed' ? 'danger' : 'muted'}
-      onPress={() => {
-        if (sync.state !== 'syncing') void syncNow(user.id);
-      }}
-    />
   );
 }
 

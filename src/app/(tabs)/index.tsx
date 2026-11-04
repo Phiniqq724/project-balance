@@ -17,7 +17,7 @@ import { useState } from 'react';
 
 import { FlowChart } from '../../../modules/balance-core/src/FlowChart';
 import { HeatLegend, Heatmap } from '@/components/heatmap';
-import { PullToReread } from '@/components/pull-to-reread';
+import { PullToRefresh } from '@/components/pull-to-refresh';
 import { Failed, Label, Loading, Money, Rule, Screen } from '@/components/kit';
 import { analyticsStart, analyze, PERIODS, type Analysis, type Period, type Share } from '@/lib/analytics';
 import { digits, rupiah, shortDate } from '@/lib/format';
@@ -57,7 +57,7 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
   const empty = data.flows.length === 0;
 
   return (
-    <PullToReread>
+    <PullToRefresh>
       <Column modifiers={[fillMaxWidth(), verticalScroll()]}>
         {!data.hasAccess && <AccessBanner />}
 
@@ -129,7 +129,7 @@ function Overview({ data, period, onPeriod }: { data: Data; period: Period; onPe
         )}
         <Spacer modifiers={[height(space.navClearance)]} />
       </Column>
-    </PullToReread>
+    </PullToRefresh>
   );
 }
 

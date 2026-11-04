@@ -3,22 +3,22 @@ import { fillMaxSize } from '@expo/ui/jetpack-compose/modifiers';
 import { useState, type ReactNode } from 'react';
 
 import { useCloudUser } from '@/lib/auth';
-import { BalanceCore } from '@/lib/ledger';
 import { syncNow } from '@/lib/sync';
 import { color } from '@/theme';
 
 /**
- * Pull down to fetch what other devices logged (signed in), then re-read every saved notification
- * with the current rules. Screens reload on the ledger event.
+ * Pull down to sync with the account: fetch what other devices logged and send this phone's changes.
+ * Notifications are not read again. Local mode has no account, so there is nothing to pull.
+ * Screens reload on the ledger event.
  */
-export function PullToReread({ children }: { children: ReactNode }) {
+export function PullToRefresh({ children }: { children: ReactNode }) {
   const user = useCloudUser();
   const [running, setRunning] = useState(false);
+  if (!user) return <>{children}</>;
   const run = async () => {
     if (running) return;
     setRunning(true);
-    if (user) await syncNow(user.id);
-    await BalanceCore.reprocessAll().catch(() => undefined);
+    await syncNow(user.id);
     setRunning(false);
   };
   return (

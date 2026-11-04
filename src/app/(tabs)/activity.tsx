@@ -13,7 +13,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Chip, Failed, Label, Loading, Rule, Screen } from '@/components/kit';
-import { PullToReread } from '@/components/pull-to-reread';
+import { PullToRefresh } from '@/components/pull-to-refresh';
 import { TxRow } from '@/components/tx-row';
 import { TxSheet } from '@/components/tx-sheet';
 import { UnparsedCard, useApps } from '@/components/unparsed-card';
@@ -170,7 +170,7 @@ export default function ActivityScreen() {
 
   return (
     <Screen>
-      <PullToReread>
+      <PullToRefresh>
         <Column modifiers={[fillMaxSize()]}>
           <Column modifiers={[fillMaxWidth(), padding(space.page, 28, space.page, 0)]} verticalArrangement={{ spacedBy: 4 }}>
             <Row verticalAlignment="bottom" modifiers={[fillMaxWidth()]}>
@@ -262,7 +262,7 @@ export default function ActivityScreen() {
             </LazyColumn>
           )}
         </Column>
-      </PullToReread>
+      </PullToRefresh>
 
       {open && <TxSheet key={open.id} tx={open} categories={categories} onClose={() => setOpenId(null)} />}
     </Screen>
