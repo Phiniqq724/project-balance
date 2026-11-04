@@ -2,7 +2,7 @@
   "expo": {
     "name": "Balance",
     "slug": "project-balance",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "projectbalance",
@@ -74,6 +74,32 @@
                 "resizeMode": "both",
                 "initialLayout": "./src/widgets/month-pulse.tsx"
               }
+            },
+            {
+              "name": "DailySpend",
+              "displayName": "Daily spend",
+              "description": "Spending per day this month",
+              "android": {
+                "targetCellWidth": 4,
+                "targetCellHeight": 2,
+                "minWidth": 250,
+                "minHeight": 110,
+                "resizeMode": "none",
+                "initialLayout": "./src/widgets/daily-spend.tsx"
+              }
+            },
+            {
+              "name": "DayByDay",
+              "displayName": "Day by day",
+              "description": "Spending, last 7 days",
+              "android": {
+                "targetCellWidth": 2,
+                "targetCellHeight": 2,
+                "minWidth": 110,
+                "minHeight": 110,
+                "resizeMode": "none",
+                "initialLayout": "./src/widgets/day-by-day.tsx"
+              }
             }
           ]
         }
@@ -83,7 +109,9 @@
         {
           "previews": {
             "spend_grid": "./assets/widget-previews/spend_grid.png",
-            "month_pulse": "./assets/widget-previews/month_pulse.png"
+            "month_pulse": "./assets/widget-previews/month_pulse.png",
+            "daily_spend": "./assets/widget-previews/daily_spend.png",
+            "day_by_day": "./assets/widget-previews/day_by_day.png"
           }
         }
       ],

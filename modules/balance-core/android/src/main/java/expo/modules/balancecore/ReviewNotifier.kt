@@ -22,6 +22,8 @@ internal object ReviewNotifier {
   private const val CHANNEL = "review"
   private const val GROUP = "balance.review"
   private const val SUMMARY_ID = -1
+  private const val BADGE_ID = -2
+  private const val BADGE_CHANNEL = "badge"
   private const val ACCENT = 0xFFFF7444.toInt()
   // Results of a bulk re-read or import for old notifications stay quiet.
   private const val RECENT_MS = 24 * 60 * 60 * 1000L
@@ -95,6 +97,55 @@ internal object ReviewNotifier {
     val gone = shown.filter { it !in open }
     gone.forEach { NotificationManagerCompat.from(app).cancel(it) }
     if (gone.isNotEmpty()) updateSummary(app, include = null, exclude = gone.toSet())
+  }
+
+  /** Items waiting in Activity > To check: every notification still unparsed. */
+  fun openCount(db: BalanceDb): Int =
+    db.readableDatabase.rawQuery("SELECT COUNT(*) FROM raw_notifications WHERE status = 'unparsed'", null)
+      .use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+
+  /**
+   * One silent notification whose only job is the launcher dot and count. It follows [openCount],
+   * is gone at 0, and stays off when Alerts are off or there is no ledger open.
+   */
+  fun syncBadge(context: Context) {
+    val app = context.applicationContext
+    val manager = NotificationManagerCompat.from(app)
+    val db = if (Account.userId(app) == null) null else BalanceDb.get(app)
+    val count = if (db == null) 0 else openCount(db)
+    if (db == null || count == 0 || !enabled(app, db)) {
+      manager.cancel(BADGE_ID)
+      return
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val channels = app.getSystemService(NotificationManager::class.java)
+      if (channels.getNotificationChannel(BADGE_CHANNEL) == null) {
+        channels.createNotificationChannel(
+          NotificationChannel(BADGE_CHANNEL, "To check count", NotificationManager.IMPORTANCE_LOW).apply {
+            setShowBadge(true)
+            setSound(null, null)
+            enableVibration(false)
+          }
+        )
+      }
+    }
+    val notification = NotificationCompat.Builder(app, BADGE_CHANNEL)
+      .setSmallIcon(R.drawable.ic_review)
+      .setColor(ACCENT)
+      .setContentTitle("$count to check")
+      .setNumber(count)
+      .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
+      .setPriority(NotificationCompat.PRIORITY_LOW)
+      .setSilent(true)
+      .setOnlyAlertOnce(true)
+      .setShowWhen(false)
+      .setAutoCancel(true)
+      .setContentIntent(open(app, "projectbalance://activity?f=review", BADGE_ID))
+      .build()
+    try {
+      manager.notify(BADGE_ID, notification)
+    } catch (_: SecurityException) {
+    }
   }
 
   fun cancel(context: Context, rawId: Long) {

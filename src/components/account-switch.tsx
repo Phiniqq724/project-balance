@@ -47,7 +47,8 @@ export function AccountSwitch({ cloud }: { cloud: boolean }) {
     try {
       await task();
       setState('idle');
-    } catch {
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : null);
       setState('failed');
     }
   };

@@ -1,10 +1,10 @@
-import { Column, FlowRow, ModalBottomSheet, Row, Spacer, Switch } from '@expo/ui/jetpack-compose';
+import { Column, FlowRow, ModalBottomSheet, Row, Spacer, Switch, TextButton } from '@expo/ui/jetpack-compose';
 import { background, fillMaxWidth, height, padding, paddingAll, weight } from '@expo/ui/jetpack-compose/modifiers';
 import { useState } from 'react';
 
 import { Chip, Label, Money, Rule } from '@/components/kit';
 import { digits, shortDate, time } from '@/lib/format';
-import { BalanceCore, sourceLabel, transactionTitle, type Category, type Transaction } from '@/lib/ledger';
+import { BalanceCore, MANUAL_SOURCE, sourceLabel, transactionTitle, type Category, type Transaction } from '@/lib/ledger';
 import { color, space } from '@/theme';
 
 type Props = {
@@ -36,6 +36,10 @@ export function TxSheet({ tx, categories, onClose }: Props) {
     });
   };
 
+  const remove = () => {
+    BalanceCore.deleteTransaction(tx.id).then(onClose, () => setError("Couldn't delete."));
+  };
+
   return (
     <ModalBottomSheet onDismissRequest={onClose} containerColor={color.surface} skipPartiallyExpanded>
       <Column modifiers={[fillMaxWidth(), padding(space.page, 4, space.page, 32)]} verticalArrangement={{ spacedBy: 20 }}>
@@ -49,9 +53,11 @@ export function TxSheet({ tx, categories, onClose }: Props) {
           </Label>
         </Column>
 
-        <Label size={13} tone="muted" modifiers={[fillMaxWidth(), background(color.bg), paddingAll(12)]}>
-          {tx.rawBody}
-        </Label>
+        {tx.rawBody !== '' && (
+          <Label size={13} tone="muted" modifiers={[fillMaxWidth(), background(color.bg), paddingAll(12)]}>
+            {tx.rawBody}
+          </Label>
+        )}
 
         <Rule />
 
@@ -87,6 +93,15 @@ export function TxSheet({ tx, categories, onClose }: Props) {
           <Label size={14} tone="danger">
             {error}
           </Label>
+        )}
+        {tx.source === MANUAL_SOURCE && (
+          <Row>
+            <TextButton onClick={remove}>
+              <Label weight="medium" tone="danger">
+                Delete
+              </Label>
+            </TextButton>
+          </Row>
         )}
         <Spacer modifiers={[height(8)]} />
       </Column>

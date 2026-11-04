@@ -1,12 +1,14 @@
 import Add from '@expo/material-symbols/add.xml';
+import Edit from '@expo/material-symbols/edit.xml';
 import Check from '@expo/material-symbols/check.xml';
-import Notifications from '@expo/material-symbols/notifications.xml';
 import NotificationsOff from '@expo/material-symbols/notifications_off.xml';
-import Refresh from '@expo/material-symbols/refresh.xml';
+import RefreshIcon from '@expo/material-symbols/refresh.xml';
 import {
   Box,
   Button,
   Column,
+  DropdownMenu,
+  DropdownMenuItem,
   FlowRow,
   Icon,
   Image,
@@ -14,7 +16,6 @@ import {
   OutlinedTextField,
   Row,
   Spacer,
-  TextButton,
   useNativeState,
 } from '@expo/ui/jetpack-compose';
 import {
@@ -94,9 +95,8 @@ function ProfileBody({ data }: { data: Data }) {
         </Label>
 
         {signedIn ? <Account /> : <LocalHeader />}
-        <Spacer modifiers={[height(28)]} />
 
-        <Access on={data.hasAccess} />
+        {!data.hasAccess && <Access />}
 
         <Apps installed={data.apps} initial={data.watched} />
 
@@ -116,11 +116,11 @@ function ProfileBody({ data }: { data: Data }) {
           <AiKeyRow />
           <AiReviewRow />
           <ReviewAlertsRow />
-          <Reprocess />
         </SettingsGroup>
 
         <Head title="Data" />
         <SettingsGroup>
+          {signedIn && <Refresh />}
           <DataRows />
         </SettingsGroup>
 
@@ -163,17 +163,20 @@ function Head({ title, detail }: { title: string; detail?: string }) {
   );
 }
 
-function Access({ on }: { on: boolean }) {
+/** Only shown while access is off; it disappears once granted and comes back if revoked. */
+function Access() {
   return (
-    <SettingsGroup>
-      <SettingsRow
-        icon={on ? Notifications : NotificationsOff}
-        title={on ? 'Reading notifications' : 'Notification access off'}
-        tone={on ? 'text' : 'danger'}
-        status={on ? 'Manage' : 'Turn on'}
-        onPress={() => BalanceCore.openNotificationAccessSettings()}
-      />
-    </SettingsGroup>
+    <Column modifiers={[fillMaxWidth(), padding(0, 20, 0, 0)]}>
+      <SettingsGroup>
+        <SettingsRow
+          icon={NotificationsOff}
+          title="Notification access off"
+          tone="danger"
+          status="Turn on"
+          onPress={() => BalanceCore.openNotificationAccessSettings()}
+        />
+      </SettingsGroup>
+    </Column>
   );
 }
 
@@ -337,37 +340,31 @@ function AppPicker({ apps, onPick, onClose }: { apps: InstalledApp[]; onPick: (p
   );
 }
 
-function Reprocess() {
-  const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
-  const run = async () => {
-    if (status === 'running') return;
-    setStatus('running');
-    try {
-      await BalanceCore.reprocessAll();
-      setStatus('done');
-    } catch {
-      setStatus('failed');
-    }
-  };
-  const text = { idle: undefined, running: 'Reading…', done: 'Done', failed: 'Failed' }[status];
+/** Syncs with the account now. Notifications aren't read again. */
+function Refresh() {
+  const user = useUser();
+  const sync = useSyncStatus();
+  const text = sync.state === 'syncing' ? 'Syncing…' : sync.state === 'failed' ? 'Failed' : undefined;
   return (
     <SettingsRow
-      icon={Refresh}
-      title="Re-read everything"
-      subtitle="Run saved notifications again"
+      icon={RefreshIcon}
+      title="Refresh"
+      subtitle="Sync with your account"
       status={text}
-      statusTone={status === 'failed' ? 'danger' : 'muted'}
-      onPress={run}
+      statusTone={sync.state === 'failed' ? 'danger' : 'muted'}
+      onPress={() => {
+        if (sync.state !== 'syncing') void syncNow(user.id);
+      }}
     />
   );
 }
 
 function syncLabel(state: ReturnType<typeof useSyncStatus>): string {
-  if (state.state === 'syncing') return 'Backing up…';
-  if (state.state === 'failed') return 'Backup failed · tap to retry';
-  if (state.at == null) return 'Not backed up yet';
+  if (state.state === 'syncing') return 'Syncing…';
+  if (state.state === 'failed') return 'Sync failed · tap to retry';
+  if (state.at == null) return 'Not synced yet';
   const minutes = Math.floor((Date.now() - state.at) / 60_000);
-  return minutes < 1 ? 'Backed up just now' : `Backed up ${minutes}m ago`;
+  return minutes < 1 ? 'Synced just now' : `Synced ${minutes}m ago`;
 }
 
 function Account() {
@@ -425,6 +422,7 @@ function ProfileSheet({ email, onClose }: { email: string; onClose: () => void }
   const [username, setUsername] = useState(initial);
   const [busy, setBusy] = useState<'photo' | 'name' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [menu, setMenu] = useState(false);
   const hasPhoto = !!profile?.avatarUri;
 
   const run = async (kind: 'photo' | 'name', task: () => Promise<string | null>) => {
@@ -440,57 +438,79 @@ function ProfileSheet({ email, onClose }: { email: string; onClose: () => void }
     if ((await run('name', () => saveUsername(user.id, username))) === null) onClose();
   };
 
+  const letter = (username || email).slice(0, 1);
+  const off = busy !== null;
+
   return (
     <ModalBottomSheet onDismissRequest={onClose} containerColor={color.surface} skipPartiallyExpanded>
-      <Column modifiers={[fillMaxWidth(), padding(space.page, 4, space.page, 32)]} verticalArrangement={{ spacedBy: 20 }}>
-        <Label size={22} weight="bold">
-          Profile
-        </Label>
+      <Column modifiers={[fillMaxWidth(), padding(space.page, 4, space.page, 28)]} verticalArrangement={{ spacedBy: 14 }}>
+        <Row verticalAlignment="top" horizontalArrangement={{ spacedBy: 14 }} modifiers={[fillMaxWidth()]}>
+          <DropdownMenu expanded={menu} onDismissRequest={() => setMenu(false)} color={color.raised}>
+            <DropdownMenu.Trigger>
+              <Box modifiers={[padding(0, 4, 0, 0), clickable(() => !off && setMenu(true))]}>
+                <Avatar uri={profile?.avatarUri ?? null} letter={letter} dim={52} />
+                <Box contentAlignment="center" modifiers={[align('bottomEnd'), size(20, 20), clip(Shapes.Circle), background(color.accent)]}>
+                  <Icon source={Edit} size={12} tint={color.bg} contentDescription="Edit photo" />
+                </Box>
+              </Box>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Items>
+              <DropdownMenuItem
+                elementColors={{ textColor: color.text }}
+                onClick={() => {
+                  setMenu(false);
+                  void run('photo', () => changeAvatar(user.id));
+                }}>
+                <DropdownMenuItem.Text>
+                  <Label weight="medium">Change photo</Label>
+                </DropdownMenuItem.Text>
+              </DropdownMenuItem>
+              {hasPhoto && (
+                <DropdownMenuItem
+                  elementColors={{ textColor: color.muted }}
+                  onClick={() => {
+                    setMenu(false);
+                    void run('photo', () => removeAvatar(user.id));
+                  }}>
+                  <DropdownMenuItem.Text>
+                    <Label weight="medium" tone="muted">
+                      Remove photo
+                    </Label>
+                  </DropdownMenuItem.Text>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenu.Items>
+          </DropdownMenu>
 
-        <Row verticalAlignment="center" horizontalArrangement={{ spacedBy: 16 }}>
-          <Avatar uri={profile?.avatarUri ?? null} letter={(username || email).slice(0, 1)} dim={80} />
-          <Column>
-            <TextButton onClick={() => void run('photo', () => changeAvatar(user.id))} enabled={busy === null}>
-              <Label weight="medium">{busy === 'photo' ? 'Uploading…' : hasPhoto ? 'Change photo' : 'Add photo'}</Label>
-            </TextButton>
-            {hasPhoto && (
-              <TextButton onClick={() => void run('photo', () => removeAvatar(user.id))} enabled={busy === null}>
-                <Label weight="medium" tone="muted">
-                  Remove
-                </Label>
-              </TextButton>
-            )}
-          </Column>
+          <OutlinedTextField
+            value={field}
+            onValueChange={(v) => {
+              setUsername(v);
+              setError(null);
+            }}
+            singleLine
+            colors={fieldColors}
+            textStyle={fieldText}
+            keyboardOptions={{ capitalization: 'none', autoCorrectEnabled: false, imeAction: 'done' }}
+            keyboardActions={{ onDone: () => void saveName() }}
+            modifiers={[weight(1)]}>
+            <OutlinedTextField.Label>
+              <Label size={14} tone="muted">
+                Username
+              </Label>
+            </OutlinedTextField.Label>
+            <OutlinedTextField.SupportingText>
+              <Label size={13} tone={error ? 'danger' : 'muted'} maxLines={1} overflow="ellipsis">
+                {busy === 'photo' ? 'Uploading…' : (error ?? email)}
+              </Label>
+            </OutlinedTextField.SupportingText>
+          </OutlinedTextField>
         </Row>
-
-        <OutlinedTextField
-          value={field}
-          onValueChange={(v) => {
-            setUsername(v);
-            setError(null);
-          }}
-          singleLine
-          colors={fieldColors}
-          textStyle={fieldText}
-          keyboardOptions={{ capitalization: 'none', autoCorrectEnabled: false, imeAction: 'done' }}
-          keyboardActions={{ onDone: () => void saveName() }}
-          modifiers={[fillMaxWidth()]}>
-          <OutlinedTextField.Label>
-            <Label size={14} tone="muted">
-              Username
-            </Label>
-          </OutlinedTextField.Label>
-          <OutlinedTextField.SupportingText>
-            <Label size={13} tone={error ? 'danger' : 'muted'}>
-              {error ?? email}
-            </Label>
-          </OutlinedTextField.SupportingText>
-        </OutlinedTextField>
 
         <Button
           onClick={saveName}
-          enabled={busy === null && username.trim().toLowerCase() !== initial}
-          modifiers={[fillMaxWidth(), height(52)]}>
+          enabled={!off && username.trim().toLowerCase() !== initial}
+          modifiers={[fillMaxWidth(), height(48)]}>
           <Label weight="bold" color={color.bg}>
             {busy === 'name' ? 'Saving…' : 'Save'}
           </Label>

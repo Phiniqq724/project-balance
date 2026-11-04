@@ -35,6 +35,8 @@ internal object WidgetBridge {
     val db = BalanceDb.get(app)
     push(app, "SpendGrid", spendGridProps(app, db))
     push(app, "MonthPulse", monthPulseProps(db))
+    push(app, "DailySpend", WidgetCharts.dailySpendProps(app, db))
+    push(app, "DayByDay", WidgetCharts.dayByDayProps(app, db))
   }
 
   private fun push(context: Context, name: String, props: JSONObject) {

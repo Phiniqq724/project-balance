@@ -1,19 +1,26 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
+import type { CloudChanges, CloudTransactionRow, SyncKind } from '../../modules/balance-core/src/BalanceCoreModule';
 import { BalanceCore } from './ledger';
 import { supabase } from './supabase';
 
 /**
- * One-way backup: the phone's ledger is the truth, Supabase holds a copy per user.
- * Only rows that differ from what the cloud already has are sent; rows gone from
- * the phone are soft-deleted. Raw notification text never leaves the phone.
+ * Two-way sync between this phone's ledger and the user's cloud copy. Every phone (and the live
+ * and dev builds on one phone) pulls what changed elsewhere, then pushes its own changes.
+ *
+ * The ledger remembers what the cloud held for each row the last time they agreed (sync_base).
+ * Against that, a row missing here was deleted here, and a cloud row this phone never saw is new
+ * from another device. Raw notification text never leaves the phone.
  */
 
-const PULLED_FROM = 'cloud_pulled';
+const SYNC_USER = 'sync_user';
+const SYNC_CURSOR = 'sync_cursor';
 const CHUNK = 500;
 const PAGE = 1000;
 const DEBOUNCE_MS = 3000;
+// Rows committed slightly out of order still get picked up; re-reading one is harmless.
+const CURSOR_OVERLAP_MS = 2 * 60 * 1000;
 
 type CloudCategory = { id: string; name: string; keywords: string; position: number };
 type CloudTransaction = {
@@ -30,17 +37,13 @@ type CloudTransaction = {
   pair_id: string | null;
   occurred_at: string;
 };
+type Remote<T> = T & { updated_at: string; deleted_at: string | null };
 
-/** What the cloud holds for the signed-in user: id -> fingerprint of the live row. */
-type Mirror = {
-  userId: string;
-  categories: Map<string, string>;
-  transactions: Map<string, string>;
-  /** The rows behind the fingerprints, for a restore. */
-  rows: { categories: CloudCategory[]; transactions: CloudTransaction[] };
-};
+const CATEGORY_COLUMNS = 'id, name, keywords, position';
+const TRANSACTION_COLUMNS =
+  'id, source, direction, amount, counterparty, bank_category, category_id, category_locked, is_transfer, transfer_locked, pair_id, occurred_at';
 
-const categoryPrint = (c: CloudCategory) => JSON.stringify([c.name, c.keywords, c.position]);
+const categoryPrint = (c: CloudCategory) => JSON.stringify([c.name, c.keywords, Number(c.position)]);
 const transactionPrint = (t: CloudTransaction) =>
   JSON.stringify([
     t.source,
@@ -56,6 +59,11 @@ const transactionPrint = (t: CloudTransaction) =>
     // The server echoes timestamps as "+00:00", the phone sends "Z".
     Date.parse(t.occurred_at),
   ]);
+
+/** Same app, same moment, same amount: one transaction, even if two builds logged it under different ids. */
+const sameTransaction = (t: CloudTransaction) => `${t.source}|${Date.parse(t.occurred_at)}|${t.direction}|${Number(t.amount)}`;
+
+// ---- Local side ---------------------------------------------------------------------------------
 
 async function localCategories(): Promise<CloudCategory[]> {
   const rows = await BalanceCore.query('SELECT id, name, keywords, position FROM categories');
@@ -88,66 +96,168 @@ async function localTransactions(): Promise<CloudTransaction[]> {
   }));
 }
 
-async function fetchAll<T>(table: string, columns: string): Promise<T[]> {
-  const out: T[] = [];
+type Base = Record<SyncKind, Map<string, string>>;
+type State = { reset: boolean; cursor: string | null; base: Base };
+
+/** What this ledger last agreed with the cloud on. Belongs to one user; anyone else starts over. */
+async function loadState(userId: string): Promise<State> {
+  const base: Base = { category: new Map(), transaction: new Map() };
+  if ((await BalanceCore.getSetting(SYNC_USER)) !== userId) return { reset: true, cursor: null, base };
+  const rows = await BalanceCore.query('SELECT kind, id, print FROM sync_base');
+  for (const r of rows) base[r.kind === 'category' ? 'category' : 'transaction'].set(String(r.id), String(r.print));
+  return { reset: false, cursor: await BalanceCore.getSetting(SYNC_CURSOR), base };
+}
+
+async function record(userId: string, changes: CloudChanges) {
+  if (!(await BalanceCore.applyCloud(userId, changes))) throw new Error('account changed');
+}
+
+// ---- Cloud side ---------------------------------------------------------------------------------
+
+/** Rows changed after `since` (or all of them), deleted ones included. */
+async function fetchChanged<T>(table: string, columns: string, since: string | null): Promise<Remote<T>[]> {
+  const out: Remote<T>[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from(table)
-      .select(columns)
-      .is('deleted_at', null)
+    let q = supabase.from(table).select(`${columns}, updated_at, deleted_at`);
+    if (since) q = q.gt('updated_at', since);
+    const { data, error } = await q
+      .order('updated_at')
       .order('id')
       .range(from, from + PAGE - 1);
     if (error) throw error;
-    out.push(...(data as T[]));
+    out.push(...(data as unknown as Remote<T>[]));
     if (data.length < PAGE) return out;
   }
 }
 
-async function loadMirror(userId: string): Promise<Mirror> {
-  const [categories, transactions] = await Promise.all([
-    fetchAll<CloudCategory>('categories', 'id, name, keywords, position'),
-    fetchAll<CloudTransaction>(
-      'transactions',
-      'id, source, direction, amount, counterparty, bank_category, category_id, category_locked, is_transfer, transfer_locked, pair_id, occurred_at'
-    ),
-  ]);
-  return {
-    userId,
-    categories: new Map(categories.map((c) => [c.id, categoryPrint(c)])),
-    transactions: new Map(transactions.map((t) => [t.id, transactionPrint(t)])),
-    rows: { categories, transactions },
-  };
+/** The cursor minus a little, as a timestamp Hermes can parse (the server sends microseconds). */
+function since(cursor: string | null): string | null {
+  if (!cursor) return null;
+  const at = Date.parse(cursor.slice(0, 19) + 'Z');
+  return Number.isNaN(at) ? null : new Date(at - CURSOR_OVERLAP_MS).toISOString();
 }
 
+// Same server format throughout, so plain string order is time order.
+const newest = (a: string | null, b: string) => (a === null || b > a ? b : a);
+
+// ---- Pull ---------------------------------------------------------------------------------------
+
 /**
- * Pulls the cloud copy into a ledger that hasn't had it yet (new phone, reinstall, first sign-in
- * after local mode). Must finish before the first push: the push soft-deletes cloud rows the
- * phone lacks. Re-runnable: native side skips rows it already has and marks the ledger when done.
+ * agree: both sides match. take: the cloud's version replaces this phone's. drop: deleted
+ * elsewhere, delete here. forget: gone on both sides. keep: this phone's version wins; the push sends it.
  */
-async function restore(m: Mirror) {
-  if ((await BalanceCore.getSetting(PULLED_FROM)) === m.userId) return;
-  await BalanceCore.mergeFromCloud(
-    m.userId,
-    m.rows.categories,
-    m.rows.transactions.map((t) => ({
-      id: t.id,
-      source: t.source,
-      direction: t.direction,
-      amount: Number(t.amount),
-      counterparty: t.counterparty,
-      bankCategory: t.bank_category,
-      categoryId: t.category_id,
-      categoryLocked: t.category_locked,
-      isTransfer: t.is_transfer,
-      transferLocked: t.transfer_locked,
-      pairId: t.pair_id,
-      occurredAt: Date.parse(t.occurred_at),
-    }))
-  );
-  if ((await BalanceCore.getSetting(PULLED_FROM)) !== m.userId) throw new Error('restore skipped');
-  // The restored rows are on the phone now; drop the heavy copy.
-  m.rows = { categories: [], transactions: [] };
+type Verdict = 'agree' | 'take' | 'drop' | 'forget' | 'keep';
+
+function decide(remote: string | null, local: string | undefined, base: string | undefined): Verdict {
+  if (remote === null) {
+    if (local === undefined) return 'forget';
+    return local === base ? 'drop' : 'keep';
+  }
+  if (local === remote) return 'agree';
+  // Missing here but agreed before: deleted on this phone.
+  if (local === undefined) return base === undefined ? 'take' : 'keep';
+  // Changed only elsewhere, or never synced from here (the cloud is the shared copy).
+  if (base === undefined || local === base) return 'take';
+  return 'keep';
 }
+
+const toNative = (t: CloudTransaction): CloudTransactionRow => ({
+  id: t.id,
+  source: t.source,
+  direction: t.direction,
+  amount: Number(t.amount),
+  counterparty: t.counterparty,
+  bankCategory: t.bank_category,
+  categoryId: t.category_id,
+  categoryLocked: t.category_locked,
+  isTransfer: t.is_transfer,
+  transferLocked: t.transfer_locked,
+  pairId: t.pair_id,
+  occurredAt: Date.parse(t.occurred_at),
+});
+
+/** Brings what changed in the cloud into this ledger. Returns cloud ids that are duplicates and should go. */
+async function pull(userId: string, state: State): Promise<Set<string>> {
+  const from = since(state.cursor);
+  const [remoteCategories, remoteTransactions, categories, transactions] = await Promise.all([
+    fetchChanged<CloudCategory>('categories', CATEGORY_COLUMNS, from),
+    fetchChanged<CloudTransaction>('transactions', TRANSACTION_COLUMNS, from),
+    localCategories(),
+    localTransactions(),
+  ]);
+
+  const changes: Required<Omit<CloudChanges, 'cursor'>> & { cursor?: string } = {
+    reset: state.reset,
+    categories: [],
+    deletedCategories: [],
+    rekeys: [],
+    transactions: [],
+    deletedTransactions: [],
+    base: [],
+  };
+  const duplicates = new Set<string>();
+  let cursor = state.cursor;
+  const agreed = (kind: SyncKind, id: string, print: string | null) => {
+    changes.base.push({ kind, id, print });
+    if (print === null) state.base[kind].delete(id);
+    else state.base[kind].set(id, print);
+  };
+
+  const localCategory = new Map(categories.map((c) => [c.id, categoryPrint(c)]));
+  for (const r of remoteCategories) {
+    cursor = newest(cursor, r.updated_at);
+    const print = r.deleted_at ? null : categoryPrint(r);
+    const verdict = decide(print, localCategory.get(r.id), state.base.category.get(r.id));
+    if (verdict === 'take') changes.categories.push({ id: r.id, name: r.name, keywords: r.keywords, position: Number(r.position) });
+    if (verdict === 'drop') changes.deletedCategories.push(r.id);
+    if (verdict === 'take' || verdict === 'agree') agreed('category', r.id, print);
+    if (verdict === 'drop' || verdict === 'forget') agreed('category', r.id, null);
+  }
+
+  const local = new Map(transactions.map((t) => [t.id, t]));
+  const byMoment = new Map(transactions.map((t) => [sameTransaction(t), t.id]));
+  // Lowest id first, so of two copies of one transaction the lower id is always the one kept.
+  const remote = [...remoteTransactions].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const r of remote) {
+    cursor = newest(cursor, r.updated_at);
+    const print = r.deleted_at ? null : transactionPrint(r);
+    const mine = local.get(r.id);
+    let verdict = decide(print, mine && transactionPrint(mine), state.base.transaction.get(r.id));
+
+    // New to this phone, but maybe logged here under another id (two builds, before ids were shared).
+    const twin = verdict === 'take' && !mine ? byMoment.get(sameTransaction(r)) : undefined;
+    if (twin !== undefined && twin !== r.id) {
+      if (twin < r.id) {
+        duplicates.add(r.id);
+        continue;
+      }
+      // The cloud's id is lower: this phone's copy takes it, and its old cloud row goes.
+      const row = local.get(twin)!;
+      local.delete(twin);
+      local.set(r.id, { ...row, id: r.id });
+      byMoment.set(sameTransaction(r), r.id);
+      changes.rekeys.push({ from: twin, to: r.id });
+      duplicates.add(twin);
+      verdict = transactionPrint({ ...row, id: r.id }) === print ? 'agree' : 'take';
+    }
+
+    if (verdict === 'take') {
+      changes.transactions.push(toNative(r));
+      byMoment.set(sameTransaction(r), r.id);
+    }
+    if (verdict === 'drop') changes.deletedTransactions.push(r.id);
+    if (verdict === 'take' || verdict === 'agree') agreed('transaction', r.id, print);
+    if (verdict === 'drop' || verdict === 'forget') agreed('transaction', r.id, null);
+  }
+
+  if (cursor) changes.cursor = cursor;
+  await record(userId, changes);
+  state.reset = false;
+  state.cursor = cursor;
+  return duplicates;
+}
+
+// ---- Push ---------------------------------------------------------------------------------------
 
 function chunks<T>(items: T[]): T[][] {
   const out: T[][] = [];
@@ -155,47 +265,51 @@ function chunks<T>(items: T[]): T[][] {
   return out;
 }
 
+/** Sends rows that differ from what the cloud last had, and soft-deletes rows gone from this phone. */
 async function pushTable<T extends { id: string }>(
   table: 'categories' | 'transactions',
+  kind: SyncKind,
   userId: string,
   local: T[],
-  mirror: Map<string, string>,
-  print: (row: T) => string
+  base: Map<string, string>,
+  print: (row: T) => string,
+  alsoGone: Set<string> = new Set()
 ) {
-  const changed = local.filter((row) => mirror.get(row.id) !== print(row));
+  const changed = local.filter((row) => base.get(row.id) !== print(row));
   const onConflict = table === 'categories' ? 'user_id,id' : 'id';
   for (const batch of chunks(changed)) {
     const { error } = await supabase
       .from(table)
       .upsert(batch.map((row) => ({ ...row, user_id: userId, deleted_at: null })), { onConflict });
     if (error) throw error;
-    for (const row of batch) mirror.set(row.id, print(row));
+    await record(userId, { base: batch.map((row) => ({ kind, id: row.id, print: print(row) })) });
+    for (const row of batch) base.set(row.id, print(row));
   }
 
   const keep = new Set(local.map((row) => row.id));
-  const gone = [...mirror.keys()].filter((id) => !keep.has(id));
+  const gone = [...new Set([...base.keys(), ...alsoGone])].filter((id) => !keep.has(id));
   for (const batch of chunks(gone)) {
     const { error } = await supabase.from(table).update({ deleted_at: new Date().toISOString() }).in('id', batch);
     if (error) throw error;
-    for (const id of batch) mirror.delete(id);
+    await record(userId, { base: batch.map((id) => ({ kind, id, print: null })) });
+    for (const id of batch) base.delete(id);
   }
 }
 
-async function push(userId: string) {
-  if (mirror?.userId !== userId) mirror = await loadMirror(userId);
-  const m = mirror;
-  await restore(m);
+async function sync(userId: string) {
+  const state = await loadState(userId);
+  // Pull first: until this phone has seen the other devices' rows, it can't tell them from deletions.
+  const duplicates = await pull(userId, state);
   const [categories, transactions] = await Promise.all([localCategories(), localTransactions()]);
   // Categories first: transactions reference them.
-  await pushTable('categories', userId, categories, m.categories, categoryPrint);
-  await pushTable('transactions', userId, transactions, m.transactions, transactionPrint);
+  await pushTable('categories', 'category', userId, categories, state.base.category, categoryPrint);
+  await pushTable('transactions', 'transaction', userId, transactions, state.base.transaction, transactionPrint, duplicates);
 }
 
 // ---- Status, for the profile screen -------------------------------------------------------------
 
 export type SyncStatus = { state: 'idle' | 'syncing' | 'synced' | 'failed'; at: number | null };
 
-let mirror: Mirror | null = null;
 let status: SyncStatus = { state: 'idle', at: null };
 const listeners = new Set<() => void>();
 
@@ -216,34 +330,41 @@ export function useSyncStatus(): SyncStatus {
 
 // ---- Scheduling ---------------------------------------------------------------------------------
 
-let running: Promise<void> | null = null;
-let again = false;
+let running: Promise<boolean> | null = null;
+let queued: Promise<boolean> | null = null;
 
-/** Pushes now, or once more right after the push already in flight. */
-export function syncNow(userId: string): Promise<void> {
-  if (running) {
-    again = true;
-    return running;
-  }
+async function run(userId: string): Promise<boolean> {
   setStatus({ ...status, state: 'syncing' });
-  running = push(userId)
-    .then(() => setStatus({ state: 'synced', at: Date.now() }))
-    .catch(() => {
-      // Start from the cloud's view next time; a half-finished push may have left the mirror stale.
-      mirror = null;
-      setStatus({ ...status, state: 'failed' });
-    })
-    .finally(() => {
-      running = null;
-      if (again) {
-        again = false;
-        void syncNow(userId);
-      }
-    });
-  return running;
+  try {
+    await sync(userId);
+    setStatus({ state: 'synced', at: Date.now() });
+    return true;
+  } catch {
+    setStatus({ ...status, state: 'failed' });
+    return false;
+  }
 }
 
-/** Keeps the signed-in user's cloud copy current while the app is open. */
+/**
+ * Syncs, starting after any sync already in flight, so everything up to this call is covered.
+ * Resolves false if it failed (offline, signed out meanwhile).
+ */
+export function syncNow(userId: string): Promise<boolean> {
+  if (queued) return queued;
+  const after = running;
+  const next = (after ?? Promise.resolve(true)).then(() => {
+    if (queued === next) queued = null;
+    return run(userId);
+  });
+  if (after) queued = next;
+  running = next;
+  void next.then(() => {
+    if (running === next) running = null;
+  });
+  return next;
+}
+
+/** Keeps the signed-in user's ledger and cloud copy in step while the app is open. */
 export function useCloudSync(userId: string) {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -255,14 +376,13 @@ export function useCloudSync(userId: string) {
     void syncNow(userId);
     const ledger = BalanceCore.addListener('onLedgerChanged', soon);
     const app = AppState.addEventListener('change', (next) => {
-      // Notifications logged while the app was closed get pushed on return.
+      // Back in the app: pick up what other devices logged, and push what arrived while closed.
       if (next === 'active') soon();
     });
     return () => {
       clearTimeout(timer);
       ledger.remove();
       app.remove();
-      mirror = null;
       setStatus({ state: 'idle', at: null });
     };
   }, [userId]);

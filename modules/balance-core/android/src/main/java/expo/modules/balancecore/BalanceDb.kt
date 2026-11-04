@@ -13,7 +13,7 @@ import java.util.UUID
  * Each account, and local mode, gets its own file; see [Account].
  */
 internal class BalanceDb private constructor(context: Context, val name: String) :
-  SQLiteOpenHelper(context.applicationContext, name, null, 4) {
+  SQLiteOpenHelper(context.applicationContext, name, null, 5) {
   val appContext: Context = context.applicationContext
 
   override fun onConfigure(db: SQLiteDatabase) {
@@ -69,6 +69,7 @@ internal class BalanceDb private constructor(context: Context, val name: String)
     db.execSQL("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     createAiReviews(db)
     createAiExamples(db)
+    createSyncBase(db)
 
     seedCategories(db)
     db.insert("settings", null, ContentValues().apply {
@@ -91,6 +92,16 @@ internal class BalanceDb private constructor(context: Context, val name: String)
     }
     if (oldVersion < 3) createAiReviews(db)
     if (oldVersion < 4) createAiExamples(db)
+    if (oldVersion < 5) createSyncBase(db)
+  }
+
+  /**
+   * What the cloud held for each row when this ledger last agreed with it (kind: "category" or
+   * "transaction", print: the row's fingerprint). Lets a sync tell "deleted here" from "added on
+   * another device". Only meaningful for the user in the "sync_user" setting.
+   */
+  private fun createSyncBase(db: SQLiteDatabase) {
+    db.execSQL("CREATE TABLE sync_base (kind TEXT NOT NULL, id TEXT NOT NULL, print TEXT NOT NULL, PRIMARY KEY (kind, id))")
   }
 
   /**

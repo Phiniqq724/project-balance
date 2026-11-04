@@ -117,6 +117,15 @@ class BalanceCoreModule : Module() {
       }
     }
 
+    // A transaction typed in by hand. occurredAt is epoch milliseconds (a Double from JS). Resolves the new id.
+    AsyncFunction("addTransaction") { direction: String, amount: Double, counterparty: String?, categoryId: String?, occurredAt: Double ->
+      Ledger.write(context) { db -> Ledger.addManual(db, direction, amount.toLong(), counterparty, categoryId, occurredAt.toLong()) }
+    }
+
+    AsyncFunction("deleteTransaction") { id: Long ->
+      Ledger.write(context) { db -> Ledger.deleteManual(db, id) }
+    }
+
     AsyncFunction("saveCategory") { id: String?, name: String, keywords: String ->
       Ledger.write(context) { db ->
         val sqlite = db.writableDatabase
@@ -215,11 +224,14 @@ class BalanceCoreModule : Module() {
     // Whose ledger is open: a user id, "local", or null before anything is chosen.
     Function("activeUser") { Account.userId(context) }
 
-    AsyncFunction("mergeFromCloud") { userId: String, categories: List<CloudCategory>, transactions: List<CloudTransaction> ->
-      Ledger.write(context) { db ->
-        // Only into the ledger it was fetched for; the owner may have changed while the fetch ran.
-        if (Account.userId(context) != userId) false else LedgerMerge.mergeCloud(db, userId, categories, transactions)
+    AsyncFunction("applyCloud") { userId: String, changes: CloudChanges ->
+      // Sync bookkeeping alone doesn't wake screens, widgets or the next sync.
+      val result = Ledger.write(context, notify = false) { db ->
+        // Only into the ledger it was worked out for; the owner may have changed while the fetch ran.
+        if (Account.userId(context) != userId) null else LedgerMerge.applyCloud(db, userId, changes)
       }
+      if (result == true) Ledger.onChanged(context)
+      result != null
     }
 
     AsyncFunction("forgetGoogleAccount") Coroutine { ->

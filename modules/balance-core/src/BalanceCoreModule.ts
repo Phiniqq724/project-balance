@@ -22,6 +22,10 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   query(sql: string, args?: SqlValue[]): Promise<Row[]>;
   setTransactionCategory(id: number, categoryId: string | null): Promise<void>;
   setTransactionTransfer(id: number, isTransfer: boolean): Promise<void>;
+  /** Logs a transaction typed in by hand (source `Manual`). `occurredAt` is epoch ms. Resolves the new transaction id. */
+  addTransaction(direction: 'in' | 'out', amount: number, counterparty: string | null, categoryId: string | null, occurredAt: number): Promise<number>;
+  /** Deletes a hand-typed transaction by id. Does nothing for one read from a notification. */
+  deleteTransaction(id: number): Promise<void>;
   saveCategory(id: string | null, name: string, keywords: string): Promise<string>;
   deleteCategory(id: string): Promise<void>;
   getSetting(key: string): Promise<string | null>;
@@ -57,12 +61,8 @@ declare class BalanceCoreModule extends NativeModule<BalanceCoreEvents> {
   setActiveUser(userId: string | null): Promise<void>;
   /** Whose ledger is open: a user id, `LOCAL_OWNER`, or null. Kept natively so the listener and widgets agree. */
   activeUser(): string | null;
-  /** Adds cloud rows this ledger lacks, once per ledger and user. Resolves false if already done or the owner changed. */
-  mergeFromCloud(
-    userId: string,
-    categories: CloudCategoryRow[],
-    transactions: CloudTransactionRow[]
-  ): Promise<boolean>;
+  /** Applies one sync step's cloud changes and records what was agreed. Resolves false if the owner changed. */
+  applyCloud(userId: string, changes: CloudChanges): Promise<boolean>;
   /** Writes the active ledger as .xlsx to the document at this content:// uri. */
   exportLedger(uri: string): Promise<{ transactions: number; categories: number }>;
   /** Reads an .xlsx and reports what importing would do. Rejects with ERR_NOT_LEDGER_FILE for other files. */
@@ -100,6 +100,23 @@ export type CloudTransactionRow = {
   pairId: string | null;
   /** Epoch milliseconds. */
   occurredAt: number;
+};
+
+export type SyncKind = 'category' | 'transaction';
+
+export type CloudChanges = {
+  /** The stored sync state belongs to someone else (or nobody yet): forget it first. */
+  reset?: boolean;
+  categories?: CloudCategoryRow[];
+  deletedCategories?: string[];
+  /** Local uids that were the same transaction as a cloud row; they take the cloud's id. */
+  rekeys?: { from: string; to: string }[];
+  transactions?: CloudTransactionRow[];
+  deletedTransactions?: string[];
+  /** What the cloud now holds per row; print null = forget the row. */
+  base?: { kind: SyncKind; id: string; print: string | null }[];
+  /** Newest cloud updated_at seen. */
+  cursor?: string;
 };
 
 export default requireNativeModule<BalanceCoreModule>('BalanceCore');

@@ -12,9 +12,10 @@ export type LedgerState<T> =
 
 /**
  * Runs a ledger read and re-runs it whenever the listener writes something new
- * or the app comes back to the foreground (the day may have changed).
+ * or the app comes back to the foreground (the day may have changed). It also re-runs when `deps`
+ * change, keeping the previous data on screen until the new read lands.
  */
-export function useLedger<T>(load: () => Promise<T>): LedgerState<T> {
+export function useLedger<T>(load: () => Promise<T>, deps: readonly unknown[] = []): LedgerState<T> {
   const [loaded, setLoaded] = useState<Loaded<T>>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
@@ -47,7 +48,8 @@ export function useLedger<T>(load: () => Promise<T>): LedgerState<T> {
       ledger.remove();
       app.remove();
     };
-  }, [attempt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt, ...deps]);
 
   if (loaded.status !== 'error') return loaded;
   return {

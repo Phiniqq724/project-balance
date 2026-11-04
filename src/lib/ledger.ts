@@ -1,4 +1,4 @@
-import BalanceCore, { type AiKind, type Row } from '../../modules/balance-core/src/BalanceCoreModule';
+import BalanceCore, { type AiKind, type Row, type SqlValue } from '../../modules/balance-core/src/BalanceCoreModule';
 
 export { BalanceCore };
 
@@ -99,7 +99,11 @@ export const MONEY_APPS: Record<string, string> = {
   'com.telkom.mwallet': 'LinkAja',
 };
 
+/** `source` of transactions typed in by hand. There is no app behind it. */
+export const MANUAL_SOURCE = 'Manual';
+
 export function sourceLabel(pkg: string): string {
+  if (pkg === MANUAL_SOURCE) return MANUAL_SOURCE;
   return MONEY_APPS[pkg] ?? BalanceCore.appLabel(pkg) ?? pkg;
 }
 
@@ -139,6 +143,96 @@ export async function getTransactions(options: { from?: Date; limit?: number } =
     [options.from?.getTime() ?? 0, options.limit ?? 2000]
   );
   return rows.map(toTransaction);
+}
+
+export type ActivityQuery = {
+  /** all, out, in, transfer, cat:<id> or cat:none (the Activity filter). */
+  filter: string;
+  /** Lower-cased search text. */
+  q: string;
+  /** Packages whose app name matches the search text. */
+  sources: string[];
+};
+
+function activityWhere({ filter, q, sources }: ActivityQuery): { sql: string; args: SqlValue[] } {
+  const where: string[] = [];
+  const args: SqlValue[] = [];
+  if (filter === 'transfer') where.push('t.is_transfer = 1');
+  else if (filter !== 'all') {
+    where.push('t.is_transfer = 0');
+    if (filter === 'out' || filter === 'in') {
+      where.push('t.direction = ?');
+      args.push(filter);
+    } else if (filter.startsWith('cat:')) {
+      const id = filter.slice(4);
+      where.push("t.direction = 'out'");
+      if (id === 'none') where.push('t.category_id IS NULL');
+      else {
+        where.push('t.category_id = ?');
+        args.push(id);
+      }
+    }
+  }
+  if (q) {
+    const ors = ['instr(lower(t.counterparty), ?) > 0', 'instr(lower(c.name), ?) > 0', 'instr(lower(t.bank_category), ?) > 0'];
+    args.push(q, q, q);
+    // "25000" and "25.000" both find Rp 25.000.
+    const number = q.replace(/[.,]/g, '');
+    if (/^\d+$/.test(number)) {
+      ors.push('instr(CAST(t.amount AS TEXT), ?) > 0');
+      args.push(number);
+    }
+    if (sources.length > 0) {
+      ors.push(`t.source IN (${sources.map(() => '?').join(',')})`);
+      args.push(...sources);
+    }
+    where.push(`(${ors.join(' OR ')})`);
+  }
+  return { sql: where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '', args };
+}
+
+/** Packages that have transactions, for matching a search against app names. */
+export async function getTransactionSources(): Promise<string[]> {
+  const rows = await BalanceCore.query('SELECT DISTINCT source FROM transactions');
+  return rows.map((r) => String(r.source));
+}
+
+/**
+ * The newest `count` matching transactions, extended to the start of the last one's day so a day
+ * is never split between pages, plus totals over everything matching.
+ */
+export async function getActivityPage(query: ActivityQuery, count: number) {
+  const { sql, args } = activityWhere(query);
+  const from = ' FROM transactions t LEFT JOIN categories c ON c.id = t.category_id';
+  const [totals] = await BalanceCore.query(
+    `SELECT COUNT(*) AS n,
+            COALESCE(SUM(CASE WHEN t.is_transfer = 0 AND t.direction = 'out' THEN t.amount END), 0) AS spent,
+            COALESCE(SUM(CASE WHEN t.is_transfer = 0 AND t.direction = 'in' THEN t.amount END), 0) AS received${from}${sql}`,
+    args
+  );
+  const total = Number(totals?.n ?? 0);
+  let cutoff = 0;
+  if (total > count) {
+    const [edge] = await BalanceCore.query(
+      `SELECT t.occurred_at${from}${sql} ORDER BY t.occurred_at DESC, t.id DESC LIMIT 1 OFFSET ?`,
+      [...args, count - 1]
+    );
+    const day = new Date(Number(edge.occurred_at));
+    cutoff = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  }
+  const rows = await BalanceCore.query(
+    `${TX_SELECT}${sql}${cutoff ? `${sql ? ' AND' : ' WHERE'} t.occurred_at >= ?` : ''}
+     ORDER BY t.occurred_at DESC, t.id DESC`,
+    cutoff ? [...args, cutoff] : args
+  );
+  const transactions = rows.map(toTransaction);
+  return {
+    transactions,
+    total,
+    spent: Number(totals?.spent ?? 0),
+    received: Number(totals?.received ?? 0),
+    hasMore: transactions.length < total,
+  };
 }
 
 /** A spend or income event, without the notification text. Transfers are left out. */

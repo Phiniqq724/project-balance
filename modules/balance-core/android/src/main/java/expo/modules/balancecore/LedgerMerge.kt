@@ -29,48 +29,74 @@ class CloudTransaction : Record {
   @Field val occurredAt: Double = 0.0
 }
 
+class SyncBaseEntry : Record {
+  /** "category" or "transaction". */
+  @Field val kind: String = ""
+  @Field val id: String = ""
+  /** null: forget the row (gone from the cloud). */
+  @Field val print: String? = null
+}
+
+class CloudRekey : Record {
+  @Field val from: String = ""
+  @Field val to: String = ""
+}
+
+/** One sync step's changes for this ledger, worked out in JS (src/lib/sync.ts). */
+class CloudChanges : Record {
+  /** The sync state belongs to another user (or none yet): forget it before applying. */
+  @Field val reset: Boolean = false
+  @Field val categories: List<CloudCategory> = emptyList()
+  @Field val deletedCategories: List<String> = emptyList()
+  /** Local notification uids that were the same transaction as a cloud row; they take the cloud's id. */
+  @Field val rekeys: List<CloudRekey> = emptyList()
+  @Field val transactions: List<CloudTransaction> = emptyList()
+  @Field val deletedTransactions: List<String> = emptyList()
+  @Field val base: List<SyncBaseEntry> = emptyList()
+  /** Newest cloud updated_at seen; the next pull asks for rows changed after it. */
+  @Field val cursor: String? = null
+}
+
 /**
  * Brings rows from somewhere else into a ledger without losing or doubling anything.
  * Rows are matched on the notification uid (the cloud transaction id), so every merge can be
- * re-run after an interruption: whatever already landed is skipped.
+ * re-run after an interruption.
  */
 internal object LedgerMerge {
-  /** Ledger setting: the user whose cloud copy has been pulled into this ledger. */
-  const val PULLED_FROM = "cloud_pulled"
+  /** Ledger setting: the user the sync state (sync_base, cursor) belongs to. */
+  const val SYNC_USER = "sync_user"
+  const val SYNC_CURSOR = "sync_cursor"
 
   /** Status of notifications rebuilt from the cloud. Their text never left the old phone, so there's nothing to re-parse. */
   const val RESTORED = "restored"
 
-  /**
-   * Adds the user's cloud rows that this ledger doesn't have yet, once per ledger and user.
-   * Returns false when it had already been done.
-   */
-  fun mergeCloud(
-    db: BalanceDb,
-    userId: String,
-    categories: List<CloudCategory>,
-    transactions: List<CloudTransaction>,
-  ): Boolean {
+  /** Applies cloud changes and records what was agreed. Returns true if the ledger's rows changed. */
+  fun applyCloud(db: BalanceDb, userId: String, changes: CloudChanges): Boolean {
     val sqlite = db.writableDatabase
+    var categoriesChanged = false
     sqlite.beginTransaction()
     try {
-      if (db.getSetting(PULLED_FROM) == userId) return false
+      if (changes.reset) {
+        sqlite.execSQL("DELETE FROM sync_base")
+        db.setSetting(SYNC_USER, userId)
+        sqlite.delete("settings", "key = ?", arrayOf(SYNC_CURSOR))
+      }
 
-      if (categories.isNotEmpty()) {
+      if (changes.categories.isNotEmpty()) {
+        categoriesChanged = true
         // A ledger still on the starter categories takes the cloud's set as-is, so ones the user
-        // deleted elsewhere don't come back. Otherwise only missing ones are added.
-        val replace = hasOnlySeedCategories(sqlite)
-        if (replace) {
-          val keep = categories.map { it.id }.toSet()
+        // deleted elsewhere don't come back.
+        if (changes.reset && hasOnlySeedCategories(sqlite)) {
+          // Everything the cloud holds: rows sent to change, plus rows already matching (only in base).
+          val keep = changes.categories.map { it.id }.toSet() +
+            changes.base.filter { it.kind == "category" && it.print != null }.map { it.id }
           for (id in categoryIds(sqlite) - keep) sqlite.delete("categories", "id = ?", arrayOf(id))
         }
-        for (c in categories) {
-          if (replace) {
-            sqlite.execSQL(
-              "UPDATE categories SET name = ?, keywords = ?, position = ? WHERE id = ?",
-              arrayOf<Any>(c.name, c.keywords, c.position.toLong(), c.id)
-            )
-          }
+        for (c in changes.categories) {
+          sqlite.execSQL(
+            "UPDATE categories SET name = ?, keywords = ?, position = ? WHERE id = ?",
+            arrayOf<Any>(c.name, c.keywords, c.position.toLong(), c.id)
+          )
           sqlite.insertWithOnConflict("categories", null, ContentValues().apply {
             put("id", c.id)
             put("name", c.name)
@@ -80,37 +106,94 @@ internal object LedgerMerge {
         }
       }
 
-      val known = categoryIds(sqlite)
-      val pairs = ArrayList<Pair<String, String>>()
-      for (t in transactions) {
-        if (rawIdForUid(sqlite, t.id) != null) continue
-        val at = t.occurredAt.toLong()
-        val rawId = insertRestoredRaw(sqlite, t.id, t.source, at) ?: continue
-        sqlite.insertOrThrow("transactions", null, ContentValues().apply {
-          put("raw_id", rawId)
-          put("source", t.source)
-          put("direction", if (t.direction == "in") "in" else "out")
-          put("amount", t.amount.toLong())
-          put("counterparty", t.counterparty)
-          put("bank_category", t.bankCategory)
-          put("category_id", t.categoryId?.takeIf { it in known })
-          put("category_locked", if (t.categoryLocked) 1 else 0)
-          put("is_transfer", if (t.isTransfer) 1 else 0)
-          put("transfer_locked", if (t.transferLocked) 1 else 0)
-          put("occurred_at", at)
-        })
-        t.pairId?.let { pairs += t.id to it }
+      for (r in changes.rekeys) {
+        if (rawIdForUid(sqlite, r.to) != null) continue
+        sqlite.execSQL("UPDATE raw_notifications SET uid = ? WHERE uid = ?", arrayOf(r.to, r.from))
       }
-      linkPairs(sqlite, pairs)
 
-      db.setSetting(PULLED_FROM, userId)
+      val known = categoryIds(sqlite)
+      for (t in changes.transactions) upsertTransaction(sqlite, t, known)
+      setPairs(sqlite, changes.transactions)
+
+      for (uid in changes.deletedTransactions) {
+        val rawId = rawIdForUid(sqlite, uid) ?: continue
+        sqlite.execSQL("DELETE FROM transactions WHERE raw_id = ?", arrayOf<Any>(rawId))
+        sqlite.execSQL("DELETE FROM raw_notifications WHERE id = ? AND status = ?", arrayOf<Any>(rawId, RESTORED))
+      }
+      if (changes.deletedTransactions.isNotEmpty()) {
+        sqlite.execSQL("UPDATE transactions SET pair_id = NULL WHERE pair_id IS NOT NULL AND pair_id NOT IN (SELECT id FROM transactions)")
+      }
+
+      for (id in changes.deletedCategories) {
+        if (sqlite.delete("categories", "id = ?", arrayOf(id)) > 0) categoriesChanged = true
+      }
+
+      for (b in changes.base) {
+        if (b.print == null) {
+          sqlite.delete("sync_base", "kind = ? AND id = ?", arrayOf(b.kind, b.id))
+        } else {
+          sqlite.insertWithOnConflict("sync_base", null, ContentValues().apply {
+            put("kind", b.kind)
+            put("id", b.id)
+            put("print", b.print)
+          }, SQLiteDatabase.CONFLICT_REPLACE)
+        }
+      }
+      changes.cursor?.let { db.setSetting(SYNC_CURSOR, it) }
       sqlite.setTransactionSuccessful()
     } finally {
       sqlite.endTransaction()
     }
-    // Starter categories may have been swapped out; refresh anything not set by hand.
-    Ledger.recategorize(db)
-    return true
+    if (categoriesChanged) Ledger.recategorize(db)
+    return categoriesChanged || changes.rekeys.isNotEmpty() || changes.transactions.isNotEmpty() || changes.deletedTransactions.isNotEmpty()
+  }
+
+  private fun upsertTransaction(sqlite: SQLiteDatabase, t: CloudTransaction, known: Set<String>) {
+    val values = ContentValues().apply {
+      put("source", t.source)
+      put("direction", if (t.direction == "in") "in" else "out")
+      put("amount", t.amount.toLong())
+      put("counterparty", t.counterparty)
+      put("bank_category", t.bankCategory)
+      put("category_id", t.categoryId?.takeIf { it in known })
+      put("category_locked", if (t.categoryLocked) 1 else 0)
+      put("is_transfer", if (t.isTransfer) 1 else 0)
+      put("transfer_locked", if (t.transferLocked) 1 else 0)
+      put("occurred_at", t.occurredAt.toLong())
+    }
+    val rawId = rawIdForUid(sqlite, t.id)
+    if (rawId == null) {
+      val restored = insertRestoredRaw(sqlite, t.id, t.source, t.occurredAt.toLong()) ?: return
+      values.put("raw_id", restored)
+      sqlite.insertOrThrow("transactions", null, values)
+      return
+    }
+    if (sqlite.update("transactions", values, "raw_id = ?", arrayOf(rawId.toString())) > 0) return
+
+    // This phone has the notification but didn't log it (older rules, or answered differently).
+    // The other device's answer is kept as a confirmed one, so re-reading keeps it.
+    values.put("raw_id", rawId)
+    sqlite.insertOrThrow("transactions", null, values)
+    sqlite.execSQL("UPDATE raw_notifications SET status = 'parsed' WHERE id = ? AND status != ?", arrayOf<Any>(rawId, RESTORED))
+    val kind = when {
+      t.isTransfer -> "transfer"
+      t.direction == "in" -> "income"
+      else -> "expense"
+    }
+    sqlite.execSQL("INSERT OR IGNORE INTO ai_reviews (raw_id) VALUES (?)", arrayOf<Any>(rawId))
+    sqlite.execSQL(
+      "UPDATE ai_reviews SET state = 'confirmed', kind = ?, direction = ?, amount = ?, counterparty = ?, updated_at = ? WHERE raw_id = ?",
+      arrayOf<Any?>(kind, t.direction, t.amount.toLong(), t.counterparty, System.currentTimeMillis(), rawId)
+    )
+  }
+
+  /** The cloud's pairing wins for the rows it sent. */
+  private fun setPairs(sqlite: SQLiteDatabase, rows: List<CloudTransaction>) {
+    for (t in rows) {
+      val tx = txIdForUid(sqlite, t.id) ?: continue
+      val partner = t.pairId?.let { txIdForUid(sqlite, it) }
+      sqlite.execSQL("UPDATE transactions SET pair_id = ? WHERE id = ?", arrayOf<Any?>(partner, tx))
+    }
   }
 
   /** Copies every notification, transaction and category from the ledger file [source] into [db]. */

@@ -1,5 +1,5 @@
 import Search from '@expo/material-symbols/search.xml';
-import { Box, Column, DockedSearchBar, Icon, LazyColumn, Row } from '@expo/ui/jetpack-compose';
+import { Box, CircularProgressIndicator, Column, DockedSearchBar, Icon, LazyColumn, Row } from '@expo/ui/jetpack-compose';
 import {
   background,
   fillMaxSize,
@@ -10,7 +10,7 @@ import {
   weight,
 } from '@expo/ui/jetpack-compose/modifiers';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Chip, Failed, Label, Loading, Rule, Screen } from '@/components/kit';
 import { PullToReread } from '@/components/pull-to-reread';
@@ -19,11 +19,11 @@ import { TxSheet } from '@/components/tx-sheet';
 import { UnparsedCard, useApps } from '@/components/unparsed-card';
 import { dayKey, dayLabel, digits } from '@/lib/format';
 import {
+  getActivityPage,
   getCategories,
-  getTransactions,
+  getTransactionSources,
   getUnparsed,
   sourceLabel,
-  transactionTitle,
   type Category,
   type RawNotification,
   type Transaction,
@@ -33,27 +33,37 @@ import { useLedger } from '@/lib/use-ledger';
 import { color, space } from '@/theme';
 
 type DayItem = { kind: 'day'; key: string; label: string; spent: number; received: number };
-type Item = DayItem | { kind: 'tx'; key: string; tx: Transaction; pair?: Transaction };
+type Item = DayItem | { kind: 'tx'; key: string; tx: Transaction; pair?: Transaction } | { kind: 'more'; key: string };
+/** Top of the All list: Today's header with everything still to check right under it. */
+type TopItem = DayItem | { kind: 'note'; key: string; n: RawNotification };
 
-async function loadActivity() {
-  const [transactions, categories, unparsed] = await Promise.all([getTransactions(), getCategories(), getUnparsed()]);
-  return { transactions, categories, unparsed };
-}
+const PAGE = 25;
 
 /**
  * `f` in the URL: all, out, in, transfer, cat:<id> / cat:none, or review for notifications no rule
  * understood. Overview links here with a category; the review alerts link with review and `fix`.
+ * Filter and search run in SQL; only the newest `count` entries (whole days) come back.
  */
-function matches(tx: Transaction, f: string) {
-  if (f === 'all') return true;
-  if (f === 'transfer') return tx.isTransfer;
-  if (tx.isTransfer) return false;
-  if (f === 'out' || f === 'in') return tx.direction === f;
-  if (f.startsWith('cat:')) {
-    const id = f.slice(4);
-    return tx.direction === 'out' && (id === 'none' ? tx.categoryId === null : tx.categoryId === id);
-  }
-  return true;
+async function loadActivity(filter: string, q: string, count: number, appName: (source: string) => string) {
+  const reviewing = filter === 'review';
+  let sources: string[] = [];
+  if (q && !reviewing) sources = (await getTransactionSources()).filter((s) => appName(s).toLowerCase().includes(q));
+  const [page, categories, unparsed] = await Promise.all([
+    reviewing ? null : getActivityPage({ filter, q, sources }, count),
+    getCategories(),
+    getUnparsed(),
+  ]);
+  return {
+    transactions: page?.transactions ?? [],
+    total: page?.total ?? 0,
+    spent: page?.spent ?? 0,
+    received: page?.received ?? 0,
+    hasMore: page?.hasMore ?? false,
+    categories,
+    unparsed,
+    // When this load ran; "today" for putting what's to check under Today.
+    now: new Date(),
+  };
 }
 
 /** Name, category, amount or app; "25000" and "25.000" both find Rp 25.000. */
@@ -67,7 +77,7 @@ function found(q: string, ...fields: (string | number | null)[]) {
   });
 }
 
-function buildItems(transactions: Transaction[]): Item[] {
+function buildItems(transactions: Transaction[], moreKey: string | null): Item[] {
   const byId = new Map(transactions.map((t) => [t.id, t]));
   const items: Item[] = [];
   const days = new Map<string, DayItem>();
@@ -89,17 +99,36 @@ function buildItems(transactions: Transaction[]): Item[] {
     }
     items.push({ kind: 'tx', key: `tx${tx.id}`, tx, pair });
   }
+  if (moreKey && items.length > 0) items.push({ kind: 'more', key: moreKey });
   return items;
 }
 
 export default function ActivityScreen() {
-  const state = useLedger(loadActivity);
   const params = useLocalSearchParams<{ f?: string; fix?: string }>();
   const filter = params.f ?? 'all';
   const fixId = params.fix ? Number(params.fix) : null;
   const [openId, setOpenId] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   const apps = useApps();
+  // Search waits for a short pause in typing so each keystroke doesn't hit the ledger.
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const next = query.trim().toLowerCase();
+    const t = setTimeout(() => setQ(next), next ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [query]);
+  const appName = (source: string) => apps[source]?.label ?? sourceLabel(source);
+
+  // How many entries are loaded; back to one page whenever the filter or search changes.
+  const scope = `${filter}|${q}`;
+  const [paging, setPaging] = useState({ scope, count: PAGE });
+  const count = paging.scope === scope ? paging.count : PAGE;
+  // Ledger changes reload what is already loaded instead of dropping back to one page.
+  const state = useLedger(() => loadActivity(filter, q, count, appName), [filter, q, count, apps]);
+  const more = useMemo(
+    () => () => setPaging((p) => ({ scope, count: (p.scope === scope ? p.count : PAGE) + PAGE })),
+    [scope]
+  );
 
   const reviewing = filter === 'review';
   const toCheck = state.status === 'ready' ? state.data.unparsed.length : 0;
@@ -116,28 +145,28 @@ export default function ActivityScreen() {
     );
   }
 
-  const { transactions, categories, unparsed } = state.data;
-  const q = query.trim().toLowerCase();
-  const appName = (source: string) => apps[source]?.label ?? sourceLabel(source);
-  const visible = reviewing
-    ? []
-    : transactions.filter(
-        (t) =>
-          matches(t, filter) &&
-          found(q, transactionTitle(t), t.categoryName, t.bankCategory, t.amount, appName(t.source))
-      );
+  const { transactions, categories, unparsed, total, hasMore } = state.data;
   const notes = reviewing
     ? unparsed
         .filter((n) => found(q, n.title, n.body, appName(n.source)))
         // A "Fix" tap from a review alert puts that card first.
         .sort((a, b) => Number(b.id === fixId) - Number(a.id === fixId))
     : [];
-  const items = buildItems(visible);
+  const items = buildItems(transactions, hasMore ? `more${count}-${transactions.length}` : null);
   const maxDay = Math.max(1, ...items.map((i) => (i.kind === 'day' ? i.spent : 0)));
-  const out = visible.reduce((sum, t) => (t.direction === 'out' && !t.isTransfer ? sum + t.amount : sum), 0);
-  const income = visible.reduce((sum, t) => (t.direction === 'in' && !t.isTransfer ? sum + t.amount : sum), 0);
+  // In All, what still waits for an answer sits at the top of Today, whatever day it came in.
+  const pending = filter === 'all' ? unparsed.filter((n) => found(q, n.title, n.body, appName(n.source))) : [];
+  const top: TopItem[] = [];
+  if (pending.length > 0) {
+    const { now } = state.data;
+    const at = items.findIndex((i) => i.kind === 'day' && i.key === dayKey(now));
+    const today = at >= 0 ? (items.splice(at, 1)[0] as DayItem) : { kind: 'day' as const, key: dayKey(now), label: dayLabel(now), spent: 0, received: 0 };
+    top.push(today, ...pending.map((n) => ({ kind: 'note' as const, key: `note${n.id}`, n })));
+  }
+  const out = state.data.spent;
+  const income = state.data.received;
   const open = transactions.find((t) => t.id === openId);
-  const count = reviewing ? notes.length : visible.length;
+  const shown = reviewing ? notes.length : total;
 
   return (
     <Screen>
@@ -149,7 +178,7 @@ export default function ActivityScreen() {
                 Activity
               </Label>
               <Label size={13} tone="muted" modifiers={[padding(0, 0, 0, 6)]}>
-                {reviewing ? `${count} to check` : count === 1 ? '1 entry' : `${count} entries`}
+                {reviewing ? `${shown} to check` : shown === 1 ? '1 entry' : `${shown} entries`}
               </Label>
             </Row>
             {!reviewing && (
@@ -196,15 +225,34 @@ export default function ActivityScreen() {
                 </LazyColumn.Items>
               </LazyColumn>
             )
-          ) : items.length === 0 ? (
+          ) : items.length === 0 && top.length === 0 ? (
             <Label tone="muted" modifiers={[padding(space.page, 24, space.page, 0)]}>
-              {transactions.length === 0 ? 'No transactions yet.' : 'Nothing here.'}
+              {filter === 'all' && !q ? 'No transactions yet.' : 'Nothing here.'}
             </Label>
           ) : (
             <LazyColumn modifiers={[fillMaxSize()]} contentPadding={{ bottom: space.navClearance }}>
-              <LazyColumn.Items data={items} keyExtractor={(item) => item.key}>
+              {/* No recycling here: a recycled card would hand its pressed state to the next one. */}
+              <LazyColumn.Items data={top} keyExtractor={(item: TopItem) => item.key} recycling={false}>
                 {({ item }) =>
                   item.kind === 'day' ? (
+                    <DayHeader day={item} max={maxDay} />
+                  ) : (
+                    <Box modifiers={[fillMaxWidth(), padding(space.page, 6, space.page, 6)]}>
+                      <UnparsedCard
+                        n={item.n}
+                        icon={apps[item.n.source]?.icon ?? null}
+                        label={apps[item.n.source]?.label ?? sourceLabel(item.n.source)}
+                        fixing={false}
+                      />
+                    </Box>
+                  )
+                }
+              </LazyColumn.Items>
+              <LazyColumn.Items data={items} keyExtractor={(item) => item.key}>
+                {({ item }) =>
+                  item.kind === 'more' ? (
+                    <MoreSentinel at={item.key} onMore={more} />
+                  ) : item.kind === 'day' ? (
                     <DayHeader day={item} max={maxDay} />
                   ) : (
                     <TxRow tx={item.tx} pair={item.pair} onPress={() => setOpenId(item.tx.id)} />
@@ -218,6 +266,20 @@ export default function ActivityScreen() {
 
       {open && <TxSheet key={open.id} tx={open} categories={categories} onClose={() => setOpenId(null)} />}
     </Screen>
+  );
+}
+
+/** Last row of a partial list: when it gets composed the user is near the end, so ask for the next page. */
+function MoreSentinel({ at, onMore }: { at: string; onMore: () => void }) {
+  useEffect(() => {
+    onMore();
+    // One request per sentinel; a recycled view with a new key asks again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [at]);
+  return (
+    <Row horizontalArrangement="center" modifiers={[fillMaxWidth(), padding(0, 16, 0, 16)]}>
+      <CircularProgressIndicator color={color.muted} />
+    </Row>
   );
 }
 

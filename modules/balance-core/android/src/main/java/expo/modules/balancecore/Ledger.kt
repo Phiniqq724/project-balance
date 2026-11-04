@@ -33,10 +33,13 @@ internal object Ledger {
   }
 
   /** Runs [block] on the writer thread and waits, so JS mutations never race the listener. */
-  fun <T> write(context: Context, block: (BalanceDb) -> T): T {
+  fun <T> write(context: Context, block: (BalanceDb) -> T): T = write(context, notify = true, block)
+
+  /** [notify] false: bookkeeping only (sync state), so screens, widgets and the sync itself aren't woken. */
+  fun <T> write(context: Context, notify: Boolean, block: (BalanceDb) -> T): T {
     // Resolved on the writer thread, so a sign-in or sign-out queued earlier has already landed.
     val result = writer.submit<T> { block(BalanceDb.get(context)) }.get()
-    onChanged(context.applicationContext)
+    if (notify) onChanged(context.applicationContext)
     return result
   }
 
@@ -51,7 +54,7 @@ internal object Ledger {
         "raw_notifications",
         null,
         ContentValues().apply {
-          put("uid", UUID.randomUUID().toString())
+          put("uid", uid(n))
           put("package", n.pkg)
           put("title", n.title)
           put("body", n.body)
@@ -68,6 +71,13 @@ internal object Ledger {
     if (changed) AiReview.kick(context)
     return changed
   }
+
+  /**
+   * Same notification, same id: the live and dev builds on one phone (or a reinstall) log it under
+   * one cloud row instead of two.
+   */
+  private fun uid(n: RawNotification): String =
+    UUID.nameUUIDFromBytes("${n.pkg}\n${n.postedAt}\n${n.body}".toByteArray()).toString()
 
   private fun process(db: BalanceDb, rawId: Long, n: RawNotification) {
     val sqlite = db.writableDatabase
@@ -269,6 +279,66 @@ internal object Ledger {
     return rules.firstOrNull { rule -> rule.keywords.any { it.containsMatchIn(haystack) } }?.id
   }
 
+  /** Source of transactions typed in by hand. */
+  const val MANUAL = "Manual"
+
+  /**
+   * Logs a transaction the user typed in. It has no notification, so it is stored like a row restored
+   * from the cloud: a hidden empty-bodied notification keeps the uid, and re-reading never touches it.
+   * A set category is locked like any hand-picked one; none is guessed from the name. Returns the transaction id.
+   */
+  fun addManual(db: BalanceDb, direction: String, amount: Long, counterparty: String?, categoryId: String?, at: Long): Long {
+    val sqlite = db.writableDatabase
+    sqlite.beginTransaction()
+    try {
+      val dir = if (direction == "in") "in" else "out"
+      // Two entries must never share (source, time, direction, amount): sync takes those for one transaction logged twice.
+      var occurredAt = at
+      while (sqlite.rawQuery(
+          "SELECT 1 FROM transactions WHERE source = ? AND occurred_at = ? AND direction = ? AND amount = ?",
+          arrayOf(MANUAL, occurredAt.toString(), dir, amount.toString())
+        ).use { it.moveToFirst() }
+      ) occurredAt++
+      val name = counterparty?.trim()?.takeIf { it.isNotEmpty() }
+      val known = categoryId != null &&
+        sqlite.rawQuery("SELECT 1 FROM categories WHERE id = ?", arrayOf(categoryId)).use { it.moveToFirst() }
+      val rawId = LedgerMerge.insertRestoredRaw(sqlite, UUID.randomUUID().toString(), MANUAL, occurredAt)
+        ?: throw IllegalStateException("No free slot for the entry")
+      val txId = sqlite.insertOrThrow("transactions", null, ContentValues().apply {
+        put("raw_id", rawId)
+        put("source", MANUAL)
+        put("direction", dir)
+        put("amount", amount)
+        put("counterparty", name)
+        put("category_id", if (known) categoryId else categorize(loadRules(db), name, null))
+        put("category_locked", if (known) 1 else 0)
+        put("is_transfer", 0)
+        put("occurred_at", occurredAt)
+      })
+      sqlite.setTransactionSuccessful()
+      return txId
+    } finally {
+      sqlite.endTransaction()
+    }
+  }
+
+  /** Removes a transaction typed in by hand, with its hidden notification. Bank notifications stay: re-reading would bring them back. */
+  fun deleteManual(db: BalanceDb, id: Long) {
+    val sqlite = db.writableDatabase
+    val rawId = sqlite.rawQuery("SELECT raw_id FROM transactions WHERE id = ? AND source = ?", arrayOf(id.toString(), MANUAL)).use {
+      if (it.moveToFirst()) it.getLong(0) else null
+    } ?: return
+    sqlite.beginTransaction()
+    try {
+      sqlite.execSQL("DELETE FROM transactions WHERE id = ?", arrayOf<Any>(id))
+      sqlite.execSQL("DELETE FROM raw_notifications WHERE id = ?", arrayOf<Any>(rawId))
+      sqlite.execSQL("UPDATE transactions SET pair_id = NULL WHERE pair_id = ?", arrayOf<Any>(id))
+      sqlite.setTransactionSuccessful()
+    } finally {
+      sqlite.endTransaction()
+    }
+  }
+
   /** Re-runs categories on every transaction the user hasn't set by hand. */
   fun recategorize(db: BalanceDb) {
     val sqlite = db.writableDatabase
@@ -381,8 +451,9 @@ internal object Ledger {
     onChanged(app)
   }
 
-  private fun onChanged(context: Context) {
+  fun onChanged(context: Context) {
     runCatching { ReviewNotifier.syncOpen(context) }
+    runCatching { ReviewNotifier.syncBadge(context) }
     WidgetBridge.refresh(context)
     BalanceEvents.emitLedgerChanged()
   }

@@ -50,11 +50,13 @@ export function chooseLocal(): Promise<void> {
   return apply(null);
 }
 
-/** Stops syncing and keeps everything on this phone. Nothing in the cloud is deleted. */
+/**
+ * Stops syncing and keeps everything on this phone. Nothing in the cloud is deleted.
+ * Syncs first, so rows from other devices come along; refuses rather than leave them behind.
+ */
 export async function switchToLocal(): Promise<void> {
   const { data } = await supabase.auth.getSession();
-  // Last push first, so nothing logged since the last sync is missing from the cloud.
-  if (data.session) await syncNow(data.session.user.id);
+  if (data.session && !(await syncNow(data.session.user.id))) throw new Error("Can't reach the cloud");
   toLocal = true;
   // Local scope: other phones on this account stay signed in. The session is dropped even offline.
   await supabase.auth.signOut({ scope: 'local' });
