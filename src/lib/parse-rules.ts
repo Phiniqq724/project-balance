@@ -36,9 +36,18 @@ const rules: Rule[] = [
   { packages: [JAGO], pattern: String.raw`^You have paid {amount} to (.+?)(?:, (.+))?$`, direction: 'out', who: 2, category: 3 },
   { packages: [JAGO], pattern: String.raw`^You've transferred {amount} to (.+)$`, direction: 'out', who: 2 },
   { packages: [JAGO], pattern: String.raw`^(.+?) has sent {amount} to you$`, direction: 'in', amount: 2, who: 1 },
+  // Pocket back to Main Pocket: no money in or out.
+  { packages: [JAGO], pattern: String.raw`^You've moved {amount} out of your .+$`, direction: 'ignore' },
 
   // Jago, Indonesian
   { packages: [JAGO], pattern: String.raw`^Kamu telah membayar {amount} ke (.+?)(?:, (.+))?$`, direction: 'out', who: 2, category: 3 },
+  // "melakukan transfer Rp50.000 ke NAME", "melakukan top up Rp20.000 ke DNID NAME" (e-wallet top up).
+  { packages: [JAGO], pattern: String.raw`^Kamu telah melakukan (?:transfer|top ?up) {amount} ke (.+)$`, direction: 'out', who: 2 },
+  // No sample yet: Jago's wording for the English rules above, so these may need a tweak.
+  { packages: [JAGO], pattern: String.raw`^{amount} telah dipindahkan dari .+ ke .+$`, direction: 'ignore' },
+  { packages: [JAGO], pattern: String.raw`^Kamu telah memindahkan {amount} (?:dari|keluar dari) .+$`, direction: 'ignore' },
+  { packages: [JAGO], pattern: String.raw`^(.+?) telah mengirim(?:kan)? {amount} (?:ke|kepada|untuk) (?:kamu|Anda)$`, direction: 'in', amount: 2, who: 1 },
+  { packages: [JAGO], pattern: String.raw`^Kamu telah menerima {amount} dari (.+)$`, direction: 'in', who: 2 },
 
   // BCA, English
   { packages: BCA, pattern: String.raw`^${diary}You spent {amount} at (.+)$`, direction: 'out', category: 2 },
@@ -58,8 +67,8 @@ const parseRules = {
   // Last resort for picked apps when AI review is off: an amount and exactly one of these.
   generic: {
     promo: String.raw`\b(cashback|promo|voucher|diskon|discount|menangkan|hadiah|reward|poin|points)\b`,
-    out: String.raw`\b(paid|spent|transferred|payment|pembayaran|bayar|membayar|pengeluaran|transfer ke|debit|keluar)\b`,
-    in: String.raw`\b(received|sent .* to you|diterima|masuk|menerima|pemasukan|kredit|credit)\b`,
+    out: String.raw`\b(paid|spent|transferred|payment|pembayaran|bayar|membayar|pengeluaran|transfer ke|melakukan transfer|top ?up|isi saldo|tarik tunai|penarikan|debit|keluar)\b`,
+    in: String.raw`\b(received|sent .* to you|diterima|masuk|menerima|pemasukan|mengirim(?:kan)? .* (?:ke|kepada) (?:kamu|anda)|kredit|credit)\b`,
   },
 };
 
